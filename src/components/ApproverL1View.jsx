@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle2, XCircle, Eye, RefreshCw, CheckCheck, XSquare, Building2, AlertCircle, BarChart3, Trash2, Calendar } from 'lucide-react';
+import { CheckCircle2, XCircle, Eye, RefreshCw, CheckCheck, XSquare, Building2, AlertCircle, BarChart3, Trash2, Calendar, FileSpreadsheet } from 'lucide-react';
 import RequestDetailModal from './RequestDetailModal';
 import AnalyticsCharts from './AnalyticsCharts';
 import { api } from '../api';
@@ -182,6 +182,17 @@ export default function ApproverL1View({ user }) {
             Processed History ({requests.length - actionable.length})
           </button>
           <button
+            onClick={() => setActiveTab('epf_summary')}
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'epf_summary'
+                ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-300 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+            }`}
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-500" />
+            <span>EPF Number-Wise Table</span>
+          </button>
+          <button
             onClick={() => setActiveTab('charts')}
             className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
               activeTab === 'charts'
@@ -189,8 +200,8 @@ export default function ApproverL1View({ user }) {
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
             }`}
           >
-            <BarChart3 className="w-3.5 h-3.5" />
-            <span>My Department Charts</span>
+            <BarChart3 className="w-3.5 h-3.5 text-blue-500" />
+            <span>Department Charts</span>
           </button>
         </div>
 
@@ -444,11 +455,21 @@ export default function ApproverL1View({ user }) {
         </div>
       )}
 
-      {/* TAB 3: HOD DEPARTMENT CHARTS */}
+      {/* TAB 3: EPF NUMBER-WISE TABLE */}
+      {activeTab === 'epf_summary' && (
+        <AnalyticsCharts
+          allowedDepartments={user.approvedDepartments}
+          title={`${user.name} — Department EPF Number-Wise Breakdown`}
+          defaultSubTab="epf"
+        />
+      )}
+
+      {/* TAB 4: HOD DEPARTMENT CHARTS */}
       {activeTab === 'charts' && (
         <AnalyticsCharts
           allowedDepartments={user.approvedDepartments}
           title={`${user.name} — Department Analytics & Headcount Charts`}
+          defaultSubTab="charts"
         />
       )}
 

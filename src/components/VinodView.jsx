@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, CheckCheck, XSquare, Eye, RefreshCw, BarChart3, ListFilter, CheckCircle2, XCircle, Search, Clock, Trash2 } from 'lucide-react';
+import { ShieldCheck, CheckCheck, XSquare, Eye, RefreshCw, BarChart3, ListFilter, CheckCircle2, XCircle, Search, Clock, Trash2, FileSpreadsheet } from 'lucide-react';
 import RequestDetailModal from './RequestDetailModal';
 import AnalyticsCharts from './AnalyticsCharts';
 import { api } from '../api';
@@ -234,6 +234,18 @@ export default function VinodView({ user }) {
           </button>
 
           <button
+            onClick={() => setActiveTab('epf_summary')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'epf_summary'
+                ? 'bg-white dark:bg-slate-700 text-purple-800 dark:text-purple-300 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+            }`}
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-500" />
+            <span>EPF Number-Wise Table</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('charts')}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'charts'
@@ -241,8 +253,8 @@ export default function VinodView({ user }) {
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
             }`}
           >
-            <BarChart3 className="w-3.5 h-3.5" />
-            <span>Department Bar Chart & Analytics</span>
+            <BarChart3 className="w-3.5 h-3.5 text-purple-600" />
+            <span>Department Bar Charts</span>
           </button>
 
           <button
@@ -428,9 +440,20 @@ export default function VinodView({ user }) {
         </div>
       )}
 
+      {/* TAB: EPF NUMBER-WISE TABLE */}
+      {activeTab === 'epf_summary' && (
+        <AnalyticsCharts
+          title="Plant-Wide EPF Number-Wise Double OT Breakdown"
+          defaultSubTab="epf"
+        />
+      )}
+
       {/* TAB 2: CHARTS & ANALYTICS */}
       {activeTab === 'charts' && (
-        <AnalyticsCharts title="Executive Double OT Headcount & Department Authorization Analytics" />
+        <AnalyticsCharts
+          title="Executive Double OT Headcount & Department Authorization Analytics"
+          defaultSubTab="charts"
+        />
       )}
 
       {/* TAB 3: ALL ARCHIVE */}

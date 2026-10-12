@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Send, PlusCircle, Calendar, Clock, CheckCircle, AlertCircle, Eye, RefreshCw, FileText, Trash2, Edit3, Filter } from 'lucide-react';
+import { Send, PlusCircle, Calendar, Clock, CheckCircle, AlertCircle, Eye, RefreshCw, FileText, Trash2, Edit3, Filter, FileSpreadsheet } from 'lucide-react';
 import EmployeeSelector from './EmployeeSelector';
 import RequestDetailModal from './RequestDetailModal';
+import AnalyticsCharts from './AnalyticsCharts';
 import { api } from '../api';
 
 export default function RequesterView({ user }) {
@@ -190,6 +191,19 @@ export default function RequesterView({ user }) {
         >
           <FileText className="w-4 h-4" />
           Submitted Requests Log ({requests.length})
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab('epf_summary');
+          }}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'epf_summary'
+              ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-300 shadow-xs'
+              : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+          }`}
+        >
+          <FileSpreadsheet className="w-4 h-4 text-indigo-500" />
+          EPF Number-Wise Summary
         </button>
       </div>
 
@@ -503,6 +517,15 @@ export default function RequesterView({ user }) {
             )}
           </div>
         </div>
+      )}
+
+      {/* EPF NUMBER-WISE SUMMARY TAB */}
+      {activeTab === 'epf_summary' && (
+        <AnalyticsCharts
+          allowedDepartments={[user.department]}
+          title={`${user.department} Department - EPF Number-Wise Summary`}
+          defaultSubTab="epf"
+        />
       )}
 
       {selectedRequestForModal && (

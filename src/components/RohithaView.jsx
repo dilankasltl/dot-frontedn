@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle2, XCircle, Eye, RefreshCw, BarChart3, Users, Clock, Trash2, Calendar } from 'lucide-react';
+import { CheckCircle2, XCircle, Eye, RefreshCw, BarChart3, Users, Clock, Trash2, Calendar, FileSpreadsheet } from 'lucide-react';
 import RequestDetailModal from './RequestDetailModal';
 import AnalyticsCharts from './AnalyticsCharts';
 import { api } from '../api';
@@ -140,6 +140,18 @@ export default function RohithaView({ user }) {
         </button>
 
         <button
+          onClick={() => setActiveTab('epf_summary')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'epf_summary'
+              ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-300 shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+          }`}
+        >
+          <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-500" />
+          <span>EPF Number-Wise Table</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('charts')}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'charts'
@@ -147,8 +159,8 @@ export default function RohithaView({ user }) {
               : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
           }`}
         >
-          <BarChart3 className="w-3.5 h-3.5" />
-          <span>Department Bar Chart & Analytics</span>
+          <BarChart3 className="w-3.5 h-3.5 text-blue-500" />
+          <span>Department Bar Charts</span>
         </button>
       </div>
 
@@ -344,9 +356,20 @@ export default function RohithaView({ user }) {
         </div>
       )}
 
+      {/* TAB: EPF NUMBER-WISE TABLE */}
+      {activeTab === 'epf_summary' && (
+        <AnalyticsCharts
+          title="Plant Operations — EPF Number-Wise Double OT Breakdown"
+          defaultSubTab="epf"
+        />
+      )}
+
       {/* TAB 3: CHARTS & ANALYTICS */}
       {activeTab === 'charts' && (
-        <AnalyticsCharts title="Plant Operations — Double OT Bar Chart & Analytics" />
+        <AnalyticsCharts
+          title="Plant Operations — Double OT Bar Chart & Analytics"
+          defaultSubTab="charts"
+        />
       )}
 
       {selectedRequestForModal && (
