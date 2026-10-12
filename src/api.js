@@ -1,5 +1,5 @@
-// Dynamic API Base URL (Supports localhost proxy or cloud backend URL)
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
+// Cloud backend hosted on Render (with optional override via VITE_API_URL)
+const API_BASE = import.meta.env.VITE_API_URL || 'https://dot-backend-16ps.onrender.com/api';
 
 export const api = {
   login: async (username, password) => {
