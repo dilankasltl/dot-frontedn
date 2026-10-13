@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { CheckCircle2, XCircle, Eye, RefreshCw, CheckCheck, XSquare, Building2, AlertCircle, BarChart3, Trash2, Calendar, FileSpreadsheet } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { CheckCircle2, XCircle, Eye, RefreshCw, CheckCheck, XSquare, Building2, AlertCircle, BarChart3, Trash2, Calendar, FileSpreadsheet, Bell } from 'lucide-react';
 import RequestDetailModal from './RequestDetailModal';
 import AnalyticsCharts from './AnalyticsCharts';
 import { api } from '../api';
+import { playNotificationSound } from '../utils/sound';
 
 export default function ApproverL1View({ user }) {
   const [requests, setRequests] = useState([]);
@@ -15,12 +16,14 @@ export default function ApproverL1View({ user }) {
   const [actionInProgress, setActionInProgress] = useState(false);
   const [message, setMessage] = useState(null);
 
+  const prevActionableCountRef = useRef(null);
+
   const todayStr = new Date().toISOString().split('T')[0];
   const [historyDateMode, setHistoryDateMode] = useState('today'); // 'today' | 'date' | 'all'
   const [historyDate, setHistoryDate] = useState(todayStr);
 
-  const fetchData = async () => {
-    setLoading(true);
+  const fetchData = async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
     try {
       const filters = {};
       if (historyDateMode === 'today') {
@@ -31,17 +34,33 @@ export default function ApproverL1View({ user }) {
 
       const data = await api.getRequests(user.username, filters);
       setRequests(data.requests || []);
-      setActionable(data.actionable || []);
-      setSelectedIds([]);
+      const newActionable = data.actionable || [];
+
+      // Check if new pending requests arrived
+      if (prevActionableCountRef.current !== null && newActionable.length > prevActionableCountRef.current) {
+        playNotificationSound();
+        setMessage({
+          type: 'info',
+          text: `🔔 New Double OT approval request received (${newActionable.length} pending)!`
+        });
+      }
+      prevActionableCountRef.current = newActionable.length;
+      setActionable(newActionable);
+      if (!isSilent) setSelectedIds([]);
     } catch (err) {
       console.error('Failed to load L1 requests', err);
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchData();
+    // Live polling every 10 seconds for real-time notification
+    const interval = setInterval(() => {
+      fetchData(true);
+    }, 10000);
+    return () => clearInterval(interval);
   }, [user.username, historyDateMode, historyDate]);
 
   const handleSingleAction = async (id, action) => {
@@ -130,12 +149,24 @@ export default function ApproverL1View({ user }) {
           </p>
         </div>
 
-        <button
-          onClick={fetchData}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer self-start sm:self-auto"
-        >
-          <RefreshCw className="w-3.5 h-3.5" /> Refresh List
-        </button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            onClick={() => {
+              playNotificationSound();
+              setMessage({ type: 'info', text: '🔔 Chime notification test sounded successfully!' });
+            }}
+            title="Test alert notification chime"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 transition-colors cursor-pointer"
+          >
+            <Bell className="w-3.5 h-3.5" /> Test Sound
+          </button>
+          <button
+            onClick={() => fetchData()}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
+          >
+            <RefreshCw className="w-3.5 h-3.5" /> Refresh List
+          </button>
+        </div>
       </div>
 
       {message && (
@@ -143,6 +174,8 @@ export default function ApproverL1View({ user }) {
           className={`p-4 rounded-xl border flex items-center justify-between text-xs font-semibold ${
             message.type === 'success'
               ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+              : message.type === 'info'
+              ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-300'
               : 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300'
           }`}
         >

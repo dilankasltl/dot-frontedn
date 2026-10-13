@@ -12,7 +12,7 @@ export default function RequesterView({ user }) {
   const todayStr = new Date().toISOString().split('T')[0];
   const [selectedEmployees, setSelectedEmployees] = useState([]);
   const [date, setDate] = useState(todayStr);
-  const [shift, setShift] = useState('Day');
+  const [shift, setShift] = useState('SHIFT A');
   const [hours, setHours] = useState(4);
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -95,6 +95,8 @@ export default function RequesterView({ user }) {
       setSelectedEmployees([]);
       setReason('');
       setDate(todayStr);
+      setShift('SHIFT A');
+      setHours(4);
       fetchMyRequests();
     } catch (err) {
       setMessage({ type: 'error', text: err.message || 'Failed to submit request.' });
@@ -106,7 +108,7 @@ export default function RequesterView({ user }) {
   const handleStartEdit = (req) => {
     setEditingRequestId(req._id);
     setDate(req.date);
-    setShift(req.shift);
+    setShift(req.shift || 'SHIFT A');
     setHours(req.hours);
     setReason(req.reason);
     setSelectedEmployees(req.employees || []);
@@ -119,6 +121,8 @@ export default function RequesterView({ user }) {
     setSelectedEmployees([]);
     setReason('');
     setDate(todayStr);
+    setShift('SHIFT A');
+    setHours(4);
   };
 
   const handleDelete = async (id) => {
@@ -275,11 +279,9 @@ export default function RequesterView({ user }) {
                   onChange={(e) => setShift(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800"
                 >
-                  <option value="Day">Day Shift</option>
-                  <option value="Night">Night Shift</option>
-                  <option value="Shift A">Shift A (Morning)</option>
-                  <option value="Shift B">Shift B (Evening)</option>
-                  <option value="Weekend / Holiday">Weekend / Poya / Holiday</option>
+                  <option value="SHIFT A">SHIFT A</option>
+                  <option value="SHIFT B">SHIFT B</option>
+                  <option value="SHIFT C">SHIFT C</option>
                 </select>
               </div>
 
