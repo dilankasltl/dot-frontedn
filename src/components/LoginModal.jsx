@@ -266,9 +266,6 @@ export default function LoginModal({ onLogin, theme, onToggleTheme }) {
                     placeholder="Enter password..."
                   />
                 </div>
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Default passwords or your custom password will both work.
-                </p>
               </div>
 
               <button
