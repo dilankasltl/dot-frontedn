@@ -5,6 +5,7 @@ import RequesterView from './components/RequesterView';
 import ApproverL1View from './components/ApproverL1View';
 import RohithaView from './components/RohithaView';
 import VinodView from './components/VinodView';
+import AdminView from './components/AdminView';
 import { api } from './api';
 
 export default function App() {
@@ -50,6 +51,10 @@ export default function App() {
   }
 
   const renderDashboard = () => {
+    if (currentUser.role === 'admin') {
+      return <AdminView user={currentUser} />;
+    }
+
     if (currentUser.role === 'approver_final') {
       return <VinodView user={currentUser} />;
     }

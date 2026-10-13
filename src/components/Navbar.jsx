@@ -8,6 +8,12 @@ export default function Navbar({ user, onLogout, theme, onToggleTheme }) {
 
   const getRoleBadge = (role) => {
     switch (role) {
+      case 'admin':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-rose-100 text-rose-800 dark:bg-rose-900/60 dark:text-rose-300 border border-rose-200 dark:border-rose-700/60">
+            <Shield className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" /> System Admin
+          </span>
+        );
       case 'approver_final':
         return (
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 dark:bg-purple-900/60 dark:text-purple-300 border border-purple-200 dark:border-purple-700/60">
@@ -51,12 +57,12 @@ export default function Navbar({ user, onLogout, theme, onToggleTheme }) {
             <div className="hidden sm:flex flex-col items-end">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                  {user.name.startsWith('Mr.') ? user.name : `Mr. ${user.name}`}
+                  {user.name.startsWith('Mr.') || user.role === 'admin' ? user.name : `Mr. ${user.name}`}
                 </span>
                 {getRoleBadge(user.role)}
               </div>
               <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                {user.department ? `Dept: ${user.department}` : 'Executive Directorate'} • {user.username}
+                {user.role === 'admin' ? 'Master Admin' : (user.department ? `Dept: ${user.department}` : 'Executive Directorate')} • {user.username}
               </span>
             </div>
 

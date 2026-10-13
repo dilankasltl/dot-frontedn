@@ -126,5 +126,85 @@ export const api = {
     const res = await fetch(`${API_BASE}/analytics?${params.toString()}`);
     if (!res.ok) throw new Error('Failed to fetch analytics');
     return res.json();
+  },
+
+  // --- Admin API Methods ---
+  getAdminUsers: async () => {
+    const res = await fetch(`${API_BASE}/admin/users`);
+    if (!res.ok) throw new Error('Failed to fetch users');
+    return res.json();
+  },
+
+  getAdminHods: async () => {
+    const res = await fetch(`${API_BASE}/admin/hods`);
+    if (!res.ok) throw new Error('Failed to fetch HODs');
+    return res.json();
+  },
+
+  createAdminUser: async (userData) => {
+    const res = await fetch(`${API_BASE}/admin/users`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(userData)
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to create user');
+    }
+    return res.json();
+  },
+
+  updateAdminUser: async (id, userData) => {
+    const res = await fetch(`${API_BASE}/admin/users/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(userData)
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to update user');
+    }
+    return res.json();
+  },
+
+  deleteAdminUser: async (id) => {
+    const res = await fetch(`${API_BASE}/admin/users/${id}`, {
+      method: 'DELETE'
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to delete user');
+    }
+    return res.json();
+  },
+
+  getAdminRequests: async (filters = {}) => {
+    const params = new URLSearchParams(filters);
+    const res = await fetch(`${API_BASE}/admin/requests?${params.toString()}`);
+    if (!res.ok) throw new Error('Failed to fetch requests');
+    return res.json();
+  },
+
+  deleteAdminRequest: async (id) => {
+    const res = await fetch(`${API_BASE}/admin/requests/${id}`, {
+      method: 'DELETE'
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to delete request');
+    }
+    return res.json();
+  },
+
+  clearAdminRequests: async (params = {}) => {
+    const searchParams = new URLSearchParams(params);
+    const res = await fetch(`${API_BASE}/admin/requests?${searchParams.toString()}`, {
+      method: 'DELETE'
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to clear requests');
+    }
+    return res.json();
   }
 };
