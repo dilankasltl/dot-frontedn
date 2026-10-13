@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Lock, User, ArrowRight, ShieldCheck, AlertCircle, Sun, Moon, KeyRound, CheckCircle2, ArrowLeft } from 'lucide-react';
 import { api } from '../api';
 
@@ -34,6 +34,60 @@ export default function LoginModal({ onLogin, theme, onToggleTheme }) {
   // Always blank by default as requested
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+
+  // Live dynamic users list (auto-updated when admin creates users)
+  const [liveUsers, setLiveUsers] = useState(PRESET_USERS);
+
+  useEffect(() => {
+    const loadUsers = async () => {
+      try {
+        const users = await api.getPublicUsers();
+        if (users && users.length > 0) {
+          const reqs = [];
+          const hods = [];
+          const finals = [];
+
+          users.forEach((u) => {
+            // Keep Admin strictly hidden from the public selection list
+            if (u.username === 'Admin' || u.role === 'admin') return;
+
+            if (u.role === 'requester') {
+              reqs.push({
+                username: u.username,
+                label: u.name,
+                dept: u.department || 'General',
+                l1: u.assignedL1Approver || 'HOD'
+              });
+            } else if (u.role === 'approver_l1') {
+              hods.push({
+                username: u.username,
+                label: u.name,
+                scope: (u.approvedDepartments && u.approvedDepartments.length > 0)
+                  ? u.approvedDepartments.join(', ')
+                  : 'Assigned Departments'
+              });
+            } else if (u.role === 'approver_final') {
+              finals.push({
+                username: u.username,
+                label: u.name,
+                scope: 'Final Authority (All Departments) + Analytics'
+              });
+            }
+          });
+
+          setLiveUsers({
+            requesters: reqs.length > 0 ? reqs : PRESET_USERS.requesters,
+            approversL1: hods.length > 0 ? hods : PRESET_USERS.approversL1,
+            approverFinal: finals.length > 0 ? finals : PRESET_USERS.approverFinal
+          });
+        }
+      } catch (err) {
+        console.error('Failed to load dynamic user list for login', err);
+      }
+    };
+
+    loadUsers();
+  }, []);
   
   // Forgot Password / Reset Password mode
   const [isForgotMode, setIsForgotMode] = useState(false);
@@ -327,7 +381,7 @@ export default function LoginModal({ onLogin, theme, onToggleTheme }) {
                   activeTab === 'requesters' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white font-bold shadow-xs' : 'hover:text-slate-900'
                 }`}
               >
-                1. Requesters (11)
+                1. Requesters ({liveUsers.requesters.length})
               </button>
               <button
                 type="button"
@@ -336,7 +390,7 @@ export default function LoginModal({ onLogin, theme, onToggleTheme }) {
                   activeTab === 'approversL1' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white font-bold shadow-xs' : 'hover:text-slate-900'
                 }`}
               >
-                2. HOD Approvers (7)
+                2. HOD Approvers ({liveUsers.approversL1.length})
               </button>
               <button
                 type="button"
@@ -351,7 +405,7 @@ export default function LoginModal({ onLogin, theme, onToggleTheme }) {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1">
               {activeTab === 'requesters' &&
-                PRESET_USERS.requesters.map((u) => (
+                liveUsers.requesters.map((u) => (
                   <button
                     key={u.username}
                     type="button"
@@ -375,7 +429,7 @@ export default function LoginModal({ onLogin, theme, onToggleTheme }) {
                 ))}
 
               {activeTab === 'approversL1' &&
-                PRESET_USERS.approversL1.map((u) => (
+                liveUsers.approversL1.map((u) => (
                   <button
                     key={u.username}
                     type="button"
@@ -399,7 +453,7 @@ export default function LoginModal({ onLogin, theme, onToggleTheme }) {
                 ))}
 
               {activeTab === 'approverFinal' &&
-                PRESET_USERS.approverFinal.map((u) => (
+                liveUsers.approverFinal.map((u) => (
                   <button
                     key={u.username}
                     type="button"

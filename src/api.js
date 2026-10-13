@@ -28,6 +28,12 @@ export const api = {
     return res.json();
   },
 
+  getPublicUsers: async () => {
+    const res = await fetch(`${API_BASE}/auth/users`);
+    if (!res.ok) throw new Error('Failed to fetch public users');
+    return res.json();
+  },
+
   getEmployees: async (search = '') => {
     const res = await fetch(`${API_BASE}/employees?search=${encodeURIComponent(search)}`);
     if (!res.ok) throw new Error('Failed to fetch employees');
