@@ -18,22 +18,35 @@ import {
   Filter,
   Check,
   X,
-  FileSpreadsheet
+  FileSpreadsheet,
+  BadgePlus,
+  Contact2
 } from 'lucide-react';
 import AnalyticsCharts from './AnalyticsCharts';
 import { api } from '../api';
 
 export default function AdminView({ user }) {
-  const [activeTab, setActiveTab] = useState('users'); // 'users' | 'data' | 'charts'
+  const [activeTab, setActiveTab] = useState('users'); // 'users' | 'employees' | 'data' | 'charts'
   const [usersList, setUsersList] = useState([]);
   const [hodsList, setHodsList] = useState([]);
   const [requestsList, setRequestsList] = useState([]);
+  const [employeesList, setEmployeesList] = useState([]);
+  const [totalEmployeesCount, setTotalEmployeesCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
 
   // User search & filter
   const [userSearch, setUserSearch] = useState('');
   const [userRoleFilter, setUserRoleFilter] = useState('ALL');
+
+  // Employee search
+  const [employeeSearch, setEmployeeSearch] = useState('');
+  const [showAddEmpModal, setShowAddEmpModal] = useState(false);
+  const [newEmpEpf, setNewEmpEpf] = useState('');
+  const [newEmpName, setNewEmpName] = useState('');
+  const [editingEmp, setEditingEmp] = useState(null);
+  const [editEmpEpf, setEditEmpEpf] = useState('');
+  const [editEmpName, setEditEmpName] = useState('');
 
   // New User Form State
   const [showAddUserModal, setShowAddUserModal] = useState(false);
@@ -78,6 +91,21 @@ export default function AdminView({ user }) {
     }
   };
 
+  const fetchEmployees = async (query = '') => {
+    try {
+      const res = await api.getAdminEmployees(query);
+      if (res.employees) {
+        setEmployeesList(res.employees);
+        setTotalEmployeesCount(res.totalCount || res.employees.length);
+      } else if (Array.isArray(res)) {
+        setEmployeesList(res);
+        setTotalEmployeesCount(res.length);
+      }
+    } catch (err) {
+      console.error('Failed to load employees', err);
+    }
+  };
+
   const fetchRequests = async () => {
     try {
       const data = await api.getAdminRequests();
@@ -89,13 +117,97 @@ export default function AdminView({ user }) {
 
   const loadAll = async () => {
     setLoading(true);
-    await Promise.all([fetchUsers(), fetchRequests()]);
+    await Promise.all([fetchUsers(), fetchEmployees(employeeSearch), fetchRequests()]);
     setLoading(false);
   };
 
   useEffect(() => {
     loadAll();
   }, []);
+
+  // Debounced search for employees
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchEmployees(employeeSearch);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [employeeSearch]);
+
+  // Handle Add Employee (EPF + Name)
+  const handleCreateEmployee = async (e) => {
+    e.preventDefault();
+    setMessage(null);
+
+    if (!newEmpEpf.trim() || !newEmpName.trim()) {
+      setMessage({ type: 'error', text: 'Both EPF Number and Full Name are required.' });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await api.createAdminEmployee({
+        epfNo: newEmpEpf.trim(),
+        fullName: newEmpName.trim()
+      });
+      setMessage({
+        type: 'success',
+        text: res.message || `Employee #${newEmpEpf} (${newEmpName}) added successfully! Now available in Double OT search.`
+      });
+      setShowAddEmpModal(false);
+      setNewEmpEpf('');
+      setNewEmpName('');
+      await fetchEmployees(employeeSearch);
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message || 'Failed to add employee.' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle Edit Employee
+  const handleStartEditEmp = (emp) => {
+    setEditingEmp(emp);
+    setEditEmpEpf(emp.epfNo);
+    setEditEmpName(emp.fullName);
+  };
+
+  const handleSaveEditEmp = async (e) => {
+    e.preventDefault();
+    if (!editingEmp) return;
+    setLoading(true);
+    setMessage(null);
+    try {
+      await api.updateAdminEmployee(editingEmp._id, {
+        epfNo: editEmpEpf.trim(),
+        fullName: editEmpName.trim()
+      });
+      setMessage({ type: 'success', text: `Employee #${editEmpEpf} updated successfully.` });
+      setEditingEmp(null);
+      await fetchEmployees(employeeSearch);
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message || 'Failed to update employee.' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle Delete Employee
+  const handleDeleteEmp = async (emp) => {
+    if (!confirm(`Are you sure you want to delete employee #${emp.epfNo} (${emp.fullName}) from the master list?`)) {
+      return;
+    }
+    setLoading(true);
+    setMessage(null);
+    try {
+      await api.deleteAdminEmployee(emp._id);
+      setMessage({ type: 'success', text: `Employee #${emp.epfNo} removed successfully.` });
+      await fetchEmployees(employeeSearch);
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message || 'Failed to delete employee.' });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Handle Create User
   const handleCreateUser = async (e) => {
@@ -331,7 +443,7 @@ export default function AdminView({ user }) {
               System Administrator Portal
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Manage Users (Requesters & HODs) • Approve Workflow Routing • Master Data Purge & Governance
+              Manage Users • Add EPF Employees • Workflow Routing • Master Data Purge & Governance
             </p>
           </div>
         </div>
@@ -362,9 +474,9 @@ export default function AdminView({ user }) {
         </div>
       )}
 
-      {/* Main Tabs */}
+      {/* Main Tabs Navigation */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex rounded-xl bg-slate-200/80 dark:bg-slate-800 p-1 shadow-inner">
+        <div className="flex flex-wrap rounded-xl bg-slate-200/80 dark:bg-slate-800 p-1 shadow-inner gap-1">
           <button
             onClick={() => setActiveTab('users')}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
@@ -375,6 +487,18 @@ export default function AdminView({ user }) {
           >
             <Users className="w-4 h-4" />
             <span>Manage Users ({usersList.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('employees')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'employees'
+                ? 'bg-white dark:bg-slate-700 text-rose-700 dark:text-rose-300 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+            }`}
+          >
+            <Contact2 className="w-4 h-4 text-emerald-500" />
+            <span>Employees (EPF Master: {totalEmployeesCount || employeesList.length})</span>
           </button>
 
           <button
@@ -402,12 +526,22 @@ export default function AdminView({ user }) {
           </button>
         </div>
 
+        {/* Header Action Buttons per Tab */}
         {activeTab === 'users' && (
           <button
             onClick={() => setShowAddUserModal(true)}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-xs transition-colors cursor-pointer self-start sm:self-auto"
           >
             <UserPlus className="w-4 h-4" /> Create New User
+          </button>
+        )}
+
+        {activeTab === 'employees' && (
+          <button
+            onClick={() => setShowAddEmpModal(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors cursor-pointer self-start sm:self-auto"
+          >
+            <BadgePlus className="w-4 h-4" /> Add New Employee (EPF)
           </button>
         )}
 
@@ -564,7 +698,94 @@ export default function AdminView({ user }) {
         </div>
       )}
 
-      {/* TAB 2: DATA & RECORDS MANAGEMENT */}
+      {/* TAB 2: EMPLOYEE MANAGEMENT (EPF MASTER) */}
+      {activeTab === 'employees' && (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs overflow-hidden transition-colors">
+          <div className="p-4 sm:p-5 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Contact2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                Employee Master Directory (EPF Search List)
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Employees added here appear instantly in "Select Employees for Double OT" across all departments
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="relative min-w-[240px]">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search by EPF # or Name..."
+                  value={employeeSearch}
+                  onChange={(e) => setEmployeeSearch(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Employees Table */}
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800 text-xs">
+              <thead className="bg-slate-50 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 font-semibold text-left">
+                <tr>
+                  <th className="py-3 px-4">EPF Number</th>
+                  <th className="py-3 px-4">Full Name</th>
+                  <th className="py-3 px-4">Department / Category</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
+                {employeesList.length === 0 ? (
+                  <tr>
+                    <td colSpan="4" className="py-10 text-center text-slate-400">
+                      No employees found matching "{employeeSearch}". Click "+ Add New Employee (EPF)" above to add one.
+                    </td>
+                  </tr>
+                ) : (
+                  employeesList.map((emp) => (
+                    <tr key={emp._id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
+                      <td className="py-3 px-4 font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                        <span className="px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800">
+                          #{emp.epfNo}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white">
+                        {emp.fullName}
+                      </td>
+                      <td className="py-3 px-4 text-slate-600 dark:text-slate-400">
+                        {emp.department || 'General'}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => handleStartEditEmp(emp)}
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-800 cursor-pointer"
+                            title="Edit Employee"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteEmp(emp)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-800 cursor-pointer"
+                            title="Delete Employee"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: DATA & RECORDS MANAGEMENT */}
       {activeTab === 'data' && (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs overflow-hidden transition-colors">
           {/* Header & Filter Controls */}
@@ -717,12 +938,151 @@ export default function AdminView({ user }) {
         </div>
       )}
 
-      {/* TAB 3: OVERVIEW CHARTS & TABLES */}
+      {/* TAB 4: OVERVIEW CHARTS & TABLES */}
       {activeTab === 'charts' && (
         <AnalyticsCharts
           title="Company Operations — Double OT Live Analytics & EPF Number Summary"
           defaultSubTab="epf"
         />
+      )}
+
+      {/* ADD EMPLOYEE MODAL (EPF No + Full Name) */}
+      {showAddEmpModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-md w-full p-6 space-y-4 my-8">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <BadgePlus className="w-5 h-5 text-emerald-600" />
+                Add Employee to EPF Directory
+              </h3>
+              <button
+                onClick={() => setShowAddEmpModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateEmployee} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  EPF Number (Employee Number) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. 1475"
+                  value={newEmpEpf}
+                  onChange={(e) => setNewEmpEpf(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                />
+                <span className="text-[11px] text-slate-400 mt-0.5 block">
+                  Must be unique across the company.
+                </span>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Employee Full Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Kaluthanthiri Gayan Indika"
+                  value={newEmpName}
+                  onChange={(e) => setNewEmpName(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-[11px]">
+                💡 This employee will instantly appear in the <strong>"Select Employees for Double OT"</strong> search box for all Requesters.
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddEmpModal(false)}
+                  className="px-4 py-2 rounded-xl font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-4 py-2 rounded-xl font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer"
+                >
+                  {loading ? 'Adding...' : 'Save Employee'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT EMPLOYEE MODAL */}
+      {editingEmp && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Edit3 className="w-5 h-5 text-blue-600" />
+                Edit Employee #{editingEmp.epfNo}
+              </h3>
+              <button
+                onClick={() => setEditingEmp(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditEmp} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  EPF Number
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editEmpEpf}
+                  onChange={(e) => setEditEmpEpf(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editEmpName}
+                  onChange={(e) => setEditEmpName(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingEmp(null)}
+                  className="px-4 py-2 rounded-xl font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-4 py-2 rounded-xl font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-xs cursor-pointer"
+                >
+                  {loading ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* CREATE NEW USER MODAL */}
@@ -923,7 +1283,6 @@ export default function AdminView({ user }) {
                 </>
               )}
 
-              {/* HOD-specific fields */}
               {newRole === 'approver_l1' && (
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">

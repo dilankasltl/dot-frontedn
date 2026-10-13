@@ -40,8 +40,8 @@ export default function Navbar({ user, onLogout, theme, onToggleTheme }) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-violet-600 flex items-center justify-center text-white font-bold text-lg shadow-sm">
-              DOT
+            <div className="bg-white px-2.5 py-1 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs flex items-center justify-center">
+              <img src="/logo.png" alt="TVS SUN-TWS Logo" className="h-8 object-contain" />
             </div>
             <div>
               <h1 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight leading-tight">

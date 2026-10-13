@@ -125,10 +125,17 @@ export default function LoginModal({ onLogin, theme, onToggleTheme }) {
       </div>
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-violet-600 mx-auto flex items-center justify-center text-white shadow-xl font-black text-2xl tracking-wider">
-          DOT
+        {/* Company Logo */}
+        <div className="flex justify-center mb-4">
+          <div className="bg-white px-5 py-2.5 rounded-2xl shadow-md border border-slate-200 dark:border-slate-700 inline-flex items-center justify-center">
+            <img
+              src="/logo.png"
+              alt="TVS SUN-TWS Logo"
+              className="h-12 sm:h-14 w-auto object-contain"
+            />
+          </div>
         </div>
-        <h2 className="mt-4 text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+        <h2 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
           Double OT Approval Portal
         </h2>
         <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">

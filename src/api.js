@@ -206,5 +206,49 @@ export const api = {
       throw new Error(err.error || 'Failed to clear requests');
     }
     return res.json();
+  },
+
+  // --- Admin Employee Management Methods ---
+  getAdminEmployees: async (search = '') => {
+    const res = await fetch(`${API_BASE}/admin/employees?search=${encodeURIComponent(search)}`);
+    if (!res.ok) throw new Error('Failed to fetch employees');
+    return res.json();
+  },
+
+  createAdminEmployee: async (empData) => {
+    const res = await fetch(`${API_BASE}/admin/employees`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(empData)
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to add employee');
+    }
+    return res.json();
+  },
+
+  updateAdminEmployee: async (id, empData) => {
+    const res = await fetch(`${API_BASE}/admin/employees/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(empData)
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to update employee');
+    }
+    return res.json();
+  },
+
+  deleteAdminEmployee: async (id) => {
+    const res = await fetch(`${API_BASE}/admin/employees/${id}`, {
+      method: 'DELETE'
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to delete employee');
+    }
+    return res.json();
   }
 };
