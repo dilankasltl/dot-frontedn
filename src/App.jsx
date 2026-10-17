@@ -59,8 +59,8 @@ export default function App() {
       return <VinodView user={currentUser} />;
     }
 
-    if (currentUser.username === 'Rohitha') {
-      return <RohithaView user={currentUser} />;
+    if (currentUser.username === 'Rohitha' || currentUser.role === 'viewer') {
+      return <RohithaView user={currentUser} isViewerOnly={currentUser.role === 'viewer'} />;
     }
 
     if (currentUser.role === 'approver_l1') {

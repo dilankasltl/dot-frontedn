@@ -5,8 +5,9 @@ import AnalyticsCharts from './AnalyticsCharts';
 import { api } from '../api';
 import { playNotificationSound } from '../utils/sound';
 
-export default function RohithaView({ user }) {
-  const [activeTab, setActiveTab] = useState('hr_approvals'); // 'hr_approvals' | 'company_monitor' | 'charts'
+export default function RohithaView({ user, isViewerOnly = false }) {
+  const isViewer = isViewerOnly || user.role === 'viewer';
+  const [activeTab, setActiveTab] = useState(isViewer ? 'company_monitor' : 'hr_approvals');
   const [actionable, setActionable] = useState([]);
   const [allPending, setAllPending] = useState([]);
   const [allRequests, setAllRequests] = useState([]);
@@ -14,6 +15,7 @@ export default function RohithaView({ user }) {
   const [selectedRequestForModal, setSelectedRequestForModal] = useState(null);
   const [actionInProgress, setActionInProgress] = useState(false);
   const [message, setMessage] = useState(null);
+  const [historyDeptFilter, setHistoryDeptFilter] = useState('ALL');
 
   const prevActionableCountRef = useRef(null);
 
@@ -25,21 +27,25 @@ export default function RohithaView({ user }) {
     try {
       const data = await api.getRequests(user.username);
       const newActionable = data.actionable || [];
+      const newAllPending = data.allPending || [];
 
       // Check for incoming requests
-      if (prevActionableCountRef.current !== null && newActionable.length > prevActionableCountRef.current) {
+      const countToCheck = isViewer ? newAllPending.length : newActionable.length;
+      if (prevActionableCountRef.current !== null && countToCheck > prevActionableCountRef.current) {
         playNotificationSound();
         setMessage({
           type: 'info',
-          text: `🔔 New HR Double OT approval request received (${newActionable.length} pending)!`
+          text: isViewer
+            ? `🔔 New Double OT authorization request received (${countToCheck} pending across company)!`
+            : `🔔 New HR Double OT approval request received (${newActionable.length} pending)!`
         });
       }
-      prevActionableCountRef.current = newActionable.length;
+      prevActionableCountRef.current = countToCheck;
       setActionable(newActionable);
-      setAllPending(data.allPending || []);
+      setAllPending(newAllPending);
       setAllRequests(data.requests || []);
     } catch (err) {
-      console.error('Failed to load Rohitha data', err);
+      console.error('Failed to load monitor data', err);
     } finally {
       if (!isSilent) setLoading(false);
     }
@@ -94,11 +100,17 @@ export default function RohithaView({ user }) {
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors">
         <div>
           <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <span className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400 flex items-center justify-center font-bold">R</span>
-            Mr. Rohitha — Executive HR Portal & Company Monitor
+            <span className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400 flex items-center justify-center font-bold">
+              {user.name?.replace('Mr. ', '')?.[0] || 'M'}
+            </span>
+            {isViewer
+              ? `${user.name} — Company-Wide Double OT Monitor & Live Operations Audit`
+              : `Mr. Rohitha — Executive HR Portal & Company Monitor`}
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            HR Level 1 Approvals (Mr. Sanka) • Plant-wide Double OT Live Monitoring • Operations Analytics
+            {isViewer
+              ? 'Plant-wide Double OT Live Monitoring • Operations Analytics • Read-Only Executive Audit'
+              : 'HR Level 1 Approvals (Mr. Sanka) • Plant-wide Double OT Live Monitoring • Operations Analytics'}
           </p>
         </div>
 
@@ -140,21 +152,49 @@ export default function RohithaView({ user }) {
       )}
 
       {/* Tabs */}
-      <div className="flex rounded-xl bg-slate-200/80 dark:bg-slate-800 p-1 w-full sm:w-auto inline-flex shadow-inner">
+      <div className="flex rounded-xl bg-slate-200/80 dark:bg-slate-800 p-1 w-full sm:w-auto inline-flex shadow-inner flex-wrap gap-1">
+        {!isViewer && (
+          <button
+            onClick={() => setActiveTab('hr_approvals')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'hr_approvals'
+                ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+            }`}
+          >
+            <span>HR Approvals (Mr. Sanka)</span>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+              actionable.length > 0 ? 'bg-amber-500 text-white' : 'bg-slate-300 dark:bg-slate-600 text-slate-700 dark:text-slate-300'
+            }`}>
+              {actionable.length}
+            </span>
+          </button>
+        )}
+
         <button
-          onClick={() => setActiveTab('hr_approvals')}
+          onClick={() => setActiveTab('company_monitor')}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'hr_approvals'
+            activeTab === 'company_monitor'
               ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-xs'
               : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
           }`}
         >
-          <span>HR Approvals (Mr. Sanka)</span>
-          <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-            actionable.length > 0 ? 'bg-amber-500 text-white' : 'bg-slate-300 dark:bg-slate-600 text-slate-700 dark:text-slate-300'
-          }`}>
-            {actionable.length}
+          <Clock className="w-3.5 h-3.5" />
+          <span>Live Pending (Plant-Wide)</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300">
+            {allPending.length}
           </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('all_history')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'all_history'
+              ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+          }`}
+        >
+          <span>All Requests History ({allRequests.length})</span>
         </button>
 
         <button
@@ -389,6 +429,89 @@ export default function RohithaView({ user }) {
         </div>
       )}
 
+      {/* TAB: ALL REQUESTS HISTORY */}
+      {activeTab === 'all_history' && (
+        <div className="space-y-4">
+          <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-xs">
+              <span className="font-bold text-slate-700 dark:text-slate-300">Filter Department:</span>
+              <select
+                value={historyDeptFilter}
+                onChange={(e) => setHistoryDeptFilter(e.target.value)}
+                className="px-3 py-1.5 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-white bg-white dark:bg-slate-800"
+              >
+                <option value="ALL">All Departments</option>
+                {Array.from(new Set(allRequests.map(r => r.department))).filter(Boolean).map(dept => (
+                  <option key={dept} value={dept}>{dept}</option>
+                ))}
+              </select>
+            </div>
+            <span className="text-xs text-slate-400">
+              Plant-wide Double OT Activity History (Read-Only)
+            </span>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs overflow-hidden transition-colors">
+            {allRequests.filter(r => historyDeptFilter === 'ALL' || r.department === historyDeptFilter).length === 0 ? (
+              <div className="p-8 text-center text-xs text-slate-500">No requests found matching filter.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800 text-xs text-left">
+                  <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 font-semibold">
+                    <tr>
+                      <th className="py-3 px-4">Req No</th>
+                      <th className="py-3 px-4">Department</th>
+                      <th className="py-3 px-4">Requester</th>
+                      <th className="py-3 px-4">Date</th>
+                      <th className="py-3 px-4">Shift</th>
+                      <th className="py-3 px-4">Hours</th>
+                      <th className="py-3 px-4">Headcount</th>
+                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4 text-right">View</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
+                    {allRequests
+                      .filter(r => historyDeptFilter === 'ALL' || r.department === historyDeptFilter)
+                      .map((req) => (
+                        <tr key={req._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                          <td className="py-3 px-4 font-mono font-bold text-blue-700 dark:text-blue-400">{req.reqNumber}</td>
+                          <td className="py-3 px-4 font-bold text-slate-800 dark:text-white">{req.department}</td>
+                          <td className="py-3 px-4 text-slate-700 dark:text-slate-300">{req.requesterName}</td>
+                          <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{req.date}</td>
+                          <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{req.shift}</td>
+                          <td className="py-3 px-4 font-bold text-slate-800 dark:text-slate-200">{req.hours}h</td>
+                          <td className="py-3 px-4 font-semibold text-slate-800 dark:text-slate-200">{req.employeeCount || req.employees?.length} Persons</td>
+                          <td className="py-3 px-4">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              req.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
+                              req.status === 'PENDING_FINAL' ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300' :
+                              req.status === 'REJECTED' ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300' :
+                              'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                            }`}>
+                              {req.status === 'APPROVED' ? 'Authorized (Vinod sir)' :
+                               req.status === 'PENDING_FINAL' ? 'Pending Final (Mr. Vinod)' :
+                               req.status === 'PENDING_L1' ? `Pending (${req.l1Approver?.name || 'HOD'})` : req.status}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <button
+                              onClick={() => setSelectedRequestForModal(req)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                            >
+                              <Eye className="w-3.5 h-3.5" /> View
+                            </button>
+                          </td>
+                        </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* TAB: EPF NUMBER-WISE TABLE */}
       {activeTab === 'epf_summary' && (
         <AnalyticsCharts
@@ -409,7 +532,7 @@ export default function RohithaView({ user }) {
         <RequestDetailModal
           request={selectedRequestForModal}
           onClose={() => setSelectedRequestForModal(null)}
-          onDelete={handleDelete}
+          onDelete={isViewer ? null : handleDelete}
         />
       )}
     </div>

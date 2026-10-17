@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { CheckCircle2, XCircle, Eye, RefreshCw, CheckCheck, XSquare, Building2, AlertCircle, BarChart3, Trash2, Calendar, FileSpreadsheet, Bell } from 'lucide-react';
+import { CheckCircle2, XCircle, Eye, RefreshCw, CheckCheck, XSquare, Building2, AlertCircle, BarChart3, Trash2, Calendar, FileSpreadsheet, Bell, Clock } from 'lucide-react';
 import RequestDetailModal from './RequestDetailModal';
 import AnalyticsCharts from './AnalyticsCharts';
 import { api } from '../api';
@@ -8,14 +8,17 @@ import { playNotificationSound } from '../utils/sound';
 export default function ApproverL1View({ user }) {
   const [requests, setRequests] = useState([]);
   const [actionable, setActionable] = useState([]);
+  const [allPending, setAllPending] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
-  const [activeTab, setActiveTab] = useState('pending'); // 'pending' | 'history' | 'charts'
+  const [activeTab, setActiveTab] = useState('pending'); // 'pending' | 'company_monitor' | 'history' | 'charts'
   const [selectedDeptFilter, setSelectedDeptFilter] = useState('ALL');
   const [selectedRequestForModal, setSelectedRequestForModal] = useState(null);
   const [actionInProgress, setActionInProgress] = useState(false);
   const [message, setMessage] = useState(null);
+  const [monitorDateMode, setMonitorDateMode] = useState('all_pending'); // 'all_pending' | 'today'
 
+  const canViewAll = user.canViewAllPending || user.username === 'Dhammika';
   const prevActionableCountRef = useRef(null);
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -34,6 +37,7 @@ export default function ApproverL1View({ user }) {
 
       const data = await api.getRequests(user.username, filters);
       setRequests(data.requests || []);
+      setAllPending(data.allPending || []);
       const newActionable = data.actionable || [];
 
       // Check if new pending requests arrived
@@ -139,13 +143,18 @@ export default function ApproverL1View({ user }) {
         <div>
           <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <Building2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-            HOD Level 1 Review & Recommendation — {user.name}
+            {canViewAll ? `HOD Level 1 Review & Company Monitor — ${user.name}` : `HOD Level 1 Review & Recommendation — ${user.name}`}
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             Assigned Departments: {' '}
             <span className="font-semibold text-slate-800 dark:text-slate-200">
               {user.approvedDepartments?.join(', ') || user.department}
             </span>
+            {canViewAll && (
+              <span className="ml-2 font-bold text-indigo-600 dark:text-indigo-400">
+                • Full Plant-Wide Live Monitoring Access Enabled
+              </span>
+            )}
           </p>
         </div>
 
@@ -188,7 +197,7 @@ export default function ApproverL1View({ user }) {
 
       {/* Tabs and Department Filter */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex rounded-xl bg-slate-200/80 dark:bg-slate-800 p-1 shadow-inner">
+        <div className="flex rounded-xl bg-slate-200/80 dark:bg-slate-800 p-1 shadow-inner flex-wrap gap-1">
           <button
             onClick={() => setActiveTab('pending')}
             className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
@@ -204,6 +213,24 @@ export default function ApproverL1View({ user }) {
               {actionable.length}
             </span>
           </button>
+
+          {canViewAll && (
+            <button
+              onClick={() => setActiveTab('company_monitor')}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                activeTab === 'company_monitor'
+                  ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+              }`}
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>Live Pending (Plant-Wide)</span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300">
+                {allPending.length}
+              </span>
+            </button>
+          )}
+
           <button
             onClick={() => setActiveTab('history')}
             className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
@@ -488,11 +515,113 @@ export default function ApproverL1View({ user }) {
         </div>
       )}
 
+      {/* TAB: COMPANY-WIDE LIVE PENDING MONITOR */}
+      {activeTab === 'company_monitor' && canViewAll && (
+        <div className="space-y-4">
+          <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-xs">
+              <span className="font-bold text-slate-700 dark:text-slate-300">View Filter:</span>
+              <div className="flex rounded-lg bg-slate-100 dark:bg-slate-800 p-1">
+                <button
+                  onClick={() => setMonitorDateMode('all_pending')}
+                  className={`px-3 py-1 rounded-md transition-all cursor-pointer ${
+                    monitorDateMode === 'all_pending' ? 'bg-white dark:bg-slate-700 font-bold text-blue-600 dark:text-blue-300 shadow-2xs' : 'text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  All Pending Live ({allPending.length})
+                </button>
+                <button
+                  onClick={() => setMonitorDateMode('today')}
+                  className={`px-3 py-1 rounded-md transition-all cursor-pointer ${
+                    monitorDateMode === 'today' ? 'bg-white dark:bg-slate-700 font-bold text-blue-600 dark:text-blue-300 shadow-2xs' : 'text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  Pending for Today ({todayStr})
+                </button>
+              </div>
+            </div>
+
+            <span className="text-xs text-slate-400">
+              Plant-wide Double OT Live Monitoring (Read-Only)
+            </span>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs overflow-hidden transition-colors">
+            {(monitorDateMode === 'today' ? allPending.filter((r) => r.date === todayStr) : allPending).length === 0 ? (
+              <div className="p-8 text-center text-xs text-slate-500">
+                No requests currently pending across the company.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800 text-xs text-left">
+                  <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 font-semibold">
+                    <tr>
+                      <th className="py-3 px-4">Req No</th>
+                      <th className="py-3 px-4">Department</th>
+                      <th className="py-3 px-4">Requester</th>
+                      <th className="py-3 px-4">Date</th>
+                      <th className="py-3 px-4">Shift</th>
+                      <th className="py-3 px-4">Hours</th>
+                      <th className="py-3 px-4">Headcount</th>
+                      <th className="py-3 px-4">Approval Stage</th>
+                      <th className="py-3 px-4 text-right">View</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
+                    {(monitorDateMode === 'today' ? allPending.filter((r) => r.date === todayStr) : allPending).map((req) => (
+                      <tr key={req._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                        <td className="py-3 px-4 font-mono font-bold text-blue-700 dark:text-blue-400">{req.reqNumber}</td>
+                        <td className="py-3 px-4">
+                          <span className="px-2 py-0.5 rounded font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                            {req.department}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 font-medium text-slate-800 dark:text-slate-200">{req.requesterName}</td>
+                        <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{req.date}</td>
+                        <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{req.shift}</td>
+                        <td className="py-3 px-4 font-bold text-slate-800 dark:text-slate-200">{req.hours}h</td>
+                        <td className="py-3 px-4">
+                          <button
+                            onClick={() => setSelectedRequestForModal(req)}
+                            className="px-2 py-0.5 rounded font-bold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 underline decoration-slate-300 cursor-pointer"
+                          >
+                            {req.employeeCount || req.employees?.length} Persons
+                          </button>
+                        </td>
+                        <td className="py-3 px-4">
+                          {req.status === 'PENDING_L1' ? (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                              Pending ({req.l1Approver?.name || 'HOD'})
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                              Pending (Mr. Vinod)
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <button
+                            onClick={() => setSelectedRequestForModal(req)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                          >
+                            <Eye className="w-3.5 h-3.5" /> View
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* TAB 3: EPF NUMBER-WISE TABLE */}
       {activeTab === 'epf_summary' && (
         <AnalyticsCharts
-          allowedDepartments={user.approvedDepartments}
-          title={`${user.name} — Department EPF Number-Wise Breakdown`}
+          allowedDepartments={canViewAll ? null : user.approvedDepartments}
+          title={canViewAll ? `${user.name} — Plant Operations EPF Number-Wise Breakdown` : `${user.name} — Department EPF Number-Wise Breakdown`}
           defaultSubTab="epf"
         />
       )}
@@ -500,8 +629,8 @@ export default function ApproverL1View({ user }) {
       {/* TAB 4: HOD DEPARTMENT CHARTS */}
       {activeTab === 'charts' && (
         <AnalyticsCharts
-          allowedDepartments={user.approvedDepartments}
-          title={`${user.name} — Department Analytics & Headcount Charts`}
+          allowedDepartments={canViewAll ? null : user.approvedDepartments}
+          title={canViewAll ? `${user.name} — Plant Operations Double OT Bar Charts & Analytics` : `${user.name} — Department Analytics & Headcount Charts`}
           defaultSubTab="charts"
         />
       )}
