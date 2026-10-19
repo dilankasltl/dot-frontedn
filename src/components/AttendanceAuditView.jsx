@@ -21,7 +21,8 @@ import {
   X,
   BarChart3,
   TrendingUp,
-  PieChart as PieIcon
+  PieChart as PieIcon,
+  Layers
 } from 'lucide-react';
 import {
   BarChart,
@@ -48,7 +49,10 @@ export default function AttendanceAuditView({ user }) {
   
   // Table filters & search
   const [searchFilter, setSearchFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL' | 'APPROVED' | 'NOT_APPROVED' | 'PENDING' | 'OFF_SHIFT' | 'HIGH_HOURS'
+  const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL' | 'APPROVED' | 'NOT_APPROVED' | 'PENDING'
+  const [categoryFilter, setCategoryFilter] = useState('ALL'); // 'ALL' | 'DOT' | '24_HRS'
+  const [selectedDeptFilter, setSelectedDeptFilter] = useState('ALL');
+  const [selectedUnitFilter, setSelectedUnitFilter] = useState('ALL');
   const [presentOnly, setPresentOnly] = useState(true); // default: show people who attended/worked
 
   // Check upload & edit permissions (canManageAttendance, Mr. Nimesh, or Admin)
@@ -61,6 +65,8 @@ export default function AttendanceAuditView({ user }) {
   const [editPresent, setEditPresent] = useState('Yes');
   const [editWorkHrs, setEditWorkHrs] = useState(0);
   const [editDotReason, setEditDotReason] = useState('');
+  const [editDepartment, setEditDepartment] = useState('');
+  const [editUnit, setEditUnit] = useState('');
 
   // Add manual record modal state
   const [showAddModal, setShowAddModal] = useState(false);
@@ -70,6 +76,7 @@ export default function AttendanceAuditView({ user }) {
   const [newPresent, setNewPresent] = useState('Yes');
   const [newWorkHrs, setNewWorkHrs] = useState(12);
   const [newDepartment, setNewDepartment] = useState('');
+  const [newUnit, setNewUnit] = useState('');
 
   // Load audit data for a given date
   const loadAuditData = async (dateToLoad = '') => {
@@ -163,15 +170,30 @@ export default function AttendanceAuditView({ user }) {
           throw new Error('Could not identify table headers (Number/EPF, Shift Name, Work Hrs). Please check the file.');
         }
 
-        // 3. Extract and filter rows according to the Double OT conditions:
-        //    Condition A: Shift Name === 'off'
-        //    Condition B: Work Hrs >= 19
+        // 3. Extract and filter rows according to:
+        //    A) Double OT: Shift Name === 'off' AND Present === 'yes'
+        //    B) 24 Hours Duty: Work Hrs >= 19
         const extractedDotRecords = [];
         let totalCount = 0;
         let fallbackDate = extractedDateStr;
 
+        let currentDept = 'General';
+        let currentUnit = 'General';
+
         for (let r = headerRowIndex + 1; r < rawRows.length; r++) {
           const row = rawRows[r];
+
+          // Carry forward hierarchical Department and Unit section headers
+          const deptCell = colMap.department !== undefined ? String(row[colMap.department] || '').trim() : '';
+          const unitCell = colMap.unit !== undefined ? String(row[colMap.unit] || '').trim() : '';
+          if (deptCell) {
+            currentDept = deptCell;
+            currentUnit = 'General';
+          }
+          if (unitCell) {
+            currentUnit = unitCell;
+          }
+
           const rawNum = String(row[colMap.number] || '').trim();
           if (!rawNum || rawNum.toLowerCase().includes('total') || rawNum.length > 10) continue;
 
@@ -183,44 +205,49 @@ export default function AttendanceAuditView({ user }) {
           const firstDate = colMap.firstDate !== undefined ? String(row[colMap.firstDate] || '').trim() : extractedDateStr;
           const workHrsRaw = colMap.workHrs !== undefined ? row[colMap.workHrs] : 0;
           const workHrs = parseFloat(String(workHrsRaw).replace(',', '.')) || 0;
-          const dept = colMap.department !== undefined ? String(row[colMap.department] || '').trim() : '';
-          const unit = colMap.unit !== undefined ? String(row[colMap.unit] || '').trim() : '';
           const inTime = colMap.inTime !== undefined ? String(row[colMap.inTime] || '').trim() : '';
           const outTime = colMap.outTime !== undefined ? String(row[colMap.outTime] || '').trim() : '';
 
           if (firstDate && !fallbackDate) fallbackDate = firstDate;
 
           const isPresentYes = String(present || '').trim().toLowerCase() === 'yes';
-          const isOffShift = shiftName.toLowerCase() === 'off';
+          const isOffShift = shiftName.toLowerCase() === 'off' || shiftName.toLowerCase().includes('off');
           const isHighHours = workHrs >= 19;
 
-          // Condition 1: Shift Name = 'off' AND Present = 'Yes' (Off day එකේ වැඩ කළ අය)
-          // Condition 2: Work Hrs >= 19 (පැය 19 හෝ ඊට වැඩි කාලයක් වැඩ කළ අය)
-          const isOffDayWorked = isOffShift && isPresentYes;
+          // Double OT is strictly: Shift = 'off' AND Present = 'yes' (Off day එකේ වැඩ කළ අය)
+          // 24 Hours Duty is strictly: Work Hrs >= 19 (පැය 19 හෝ ඊට වැඩි කාලයක් වැඩ කළ අය)
+          const isDot = isOffShift && isPresentYes;
+          const is24Hours = isHighHours;
 
-          // Double OT qualification
-          if (isOffDayWorked || isHighHours) {
+          if (isDot || is24Hours) {
+            let category = 'DOT';
             let dotReason = '';
-            if (isOffDayWorked && isHighHours) {
-              dotReason = 'Off Day & Work Hrs >= 19h';
-            } else if (isOffDayWorked) {
-              dotReason = 'Shift = Off (Worked on Off Day)';
+            if (isDot && is24Hours) {
+              category = 'BOTH';
+              dotReason = 'Off Day & 24 Hours Duty';
+            } else if (isDot) {
+              category = 'DOT';
+              dotReason = 'Double OT (Off Day Worked)';
             } else {
-              dotReason = `Work Hrs >= 19h (${workHrs}h)`;
+              category = '24_HRS';
+              dotReason = `24 Hours Duty (${workHrs}h)`;
             }
 
             extractedDotRecords.push({
               epfNo: rawNum,
               fullName: rawFullName,
-              department: dept,
-              unit: unit,
+              department: currentDept,
+              unit: currentUnit,
               shiftName: shiftName || 'Off',
               present: present || 'Yes',
               firstDate: firstDate || fallbackDate,
               workHrs: workHrs,
               inTime: inTime,
               outTime: outTime,
-              dotReason: dotReason
+              dotReason: dotReason,
+              category: category,
+              isDot: isDot,
+              is24Hours: is24Hours
             });
           }
         }
@@ -228,7 +255,7 @@ export default function AttendanceAuditView({ user }) {
         if (extractedDotRecords.length === 0) {
           setMessage({
             type: 'error',
-            text: `No Double OT incidents found in this file (Checked ${totalCount} employee attendance rows).`
+            text: `No Double OT or 24 Hours Duty incidents found in this file (Checked ${totalCount} employee attendance rows).`
           });
           setUploading(false);
           return;
@@ -249,7 +276,7 @@ export default function AttendanceAuditView({ user }) {
 
         setMessage({
           type: 'success',
-          text: `Attendance for date ${effectiveReportDate} processed! Found ${extractedDotRecords.length} Double OT incidents from ${totalCount} attendance records.`
+          text: `Attendance for date ${effectiveReportDate} processed! Found ${extractedDotRecords.length} incidents: ${res.audit?.dotCount ?? extractedDotRecords.filter(r => r.isDot).length} Double OT (Off Day) & ${res.audit?.twentyFourHrsCount ?? extractedDotRecords.filter(r => r.is24Hours).length} 24 Hours Duty from ${totalCount} attendance records.`
         });
 
         // Reload fresh audit data
@@ -309,6 +336,8 @@ export default function AttendanceAuditView({ user }) {
         shiftName: editShiftName,
         present: editPresent,
         workHrs: Number(editWorkHrs),
+        department: editDepartment,
+        unit: editUnit,
         dotReason: editDotReason || (editShiftName.toLowerCase() === 'off' ? 'Shift = Off (Edited)' : `Work Hrs >= 19h (${editWorkHrs}h)`)
       });
       setMessage({ type: 'success', text: `Employee #${editingRecord.epfNo} updated successfully!` });
@@ -333,12 +362,15 @@ export default function AttendanceAuditView({ user }) {
         shiftName: newShiftName,
         present: newPresent,
         workHrs: Number(newWorkHrs),
-        department: newDepartment
+        department: newDepartment || 'General',
+        unit: newUnit || 'General'
       });
       setMessage({ type: 'success', text: `Employee #${newEpfNo} added to ${selectedDate} audit successfully!` });
       setShowAddModal(false);
       setNewEpfNo('');
       setNewFullName('');
+      setNewDepartment('');
+      setNewUnit('');
       setNewWorkHrs(12);
       await loadAuditData(selectedDate);
     } catch (err) {
@@ -348,6 +380,18 @@ export default function AttendanceAuditView({ user }) {
 
   // Filter dot records based on user search and filters
   const records = auditData?.dotRecords || [];
+
+  // Unique departments for filter dropdown
+  const uniqueDepartments = Array.from(new Set(records.map(r => r.department || 'General').filter(Boolean))).sort();
+
+  // Unique units for selected department (or all units)
+  const availableUnitsForDept = Array.from(new Set(
+    records
+      .filter(r => selectedDeptFilter === 'ALL' || (r.department || 'General') === selectedDeptFilter)
+      .map(r => r.unit || 'General')
+      .filter(Boolean)
+  )).sort();
+
   const filteredRecords = records.filter(r => {
     // 1. Present filter
     if (presentOnly) {
@@ -355,21 +399,35 @@ export default function AttendanceAuditView({ user }) {
       if (!isPresent) return false;
     }
 
-    // 2. Status / Condition filter
+    // 2. Category filter: 'ALL' | 'DOT' | '24_HRS'
+    if (categoryFilter === 'DOT') {
+      const isDot = r.isDot || (String(r.shiftName).toLowerCase().includes('off') && String(r.present).toLowerCase() === 'yes');
+      if (!isDot) return false;
+    } else if (categoryFilter === '24_HRS') {
+      const is24 = r.is24Hours || Number(r.workHrs || 0) >= 19;
+      if (!is24) return false;
+    }
+
+    // 3. Status filter
     if (statusFilter === 'APPROVED' && r.vinodStatus !== 'APPROVED') return false;
     if (statusFilter === 'NOT_APPROVED' && r.vinodStatus !== 'NOT_APPROVED') return false;
     if (statusFilter === 'PENDING' && r.vinodStatus !== 'PENDING') return false;
-    if (statusFilter === 'OFF_SHIFT' && !(String(r.shiftName).toLowerCase().includes('off') && String(r.present).toLowerCase() === 'yes')) return false;
-    if (statusFilter === 'HIGH_HOURS' && Number(r.workHrs || 0) < 19) return false;
 
-    // 3. Search query
+    // 4. Department filter
+    if (selectedDeptFilter !== 'ALL' && (r.department || 'General') !== selectedDeptFilter) return false;
+
+    // 5. Unit filter
+    if (selectedUnitFilter !== 'ALL' && (r.unit || 'General') !== selectedUnitFilter) return false;
+
+    // 6. Search query
     if (searchFilter) {
       const q = searchFilter.toLowerCase();
       const matchEpf = String(r.epfNo || '').toLowerCase().includes(q);
       const matchName = String(r.fullName || '').toLowerCase().includes(q);
       const matchDept = String(r.department || '').toLowerCase().includes(q);
+      const matchUnit = String(r.unit || '').toLowerCase().includes(q);
       const matchShift = String(r.shiftName || '').toLowerCase().includes(q);
-      if (!matchEpf && !matchName && !matchDept && !matchShift) return false;
+      if (!matchEpf && !matchName && !matchDept && !matchUnit && !matchShift) return false;
     }
 
     return true;
@@ -377,12 +435,76 @@ export default function AttendanceAuditView({ user }) {
 
   // Summary counts
   const totalIncidents = records.length;
+  const dotRecordsList = records.filter(r => r.isDot || (String(r.shiftName).toLowerCase().includes('off') && String(r.present).toLowerCase() === 'yes'));
+  const dotCount = dotRecordsList.length;
+  const twentyFourRecordsList = records.filter(r => r.is24Hours || Number(r.workHrs || 0) >= 19);
+  const twentyFourHrsCount = twentyFourRecordsList.length;
   const approvedCount = records.filter(r => r.vinodStatus === 'APPROVED').length;
   const notApprovedCount = records.filter(r => r.vinodStatus === 'NOT_APPROVED').length;
   const pendingCount = records.filter(r => r.vinodStatus === 'PENDING').length;
-  const offShiftCount = records.filter(r => String(r.shiftName).toLowerCase().includes('off') && String(r.present).toLowerCase() === 'yes').length;
-  const highHoursCount = records.filter(r => Number(r.workHrs || 0) >= 19).length;
-  const bothCount = records.filter(r => String(r.shiftName).toLowerCase().includes('off') && String(r.present).toLowerCase() === 'yes' && Number(r.workHrs || 0) >= 19).length;
+  const bothCount = records.filter(r => (r.isDot || String(r.shiftName).toLowerCase().includes('off')) && (r.is24Hours || Number(r.workHrs || 0) >= 19)).length;
+
+  // Department-Wise Chart Data
+  const deptMap = {};
+  records.forEach(r => {
+    const dept = r.department || 'General';
+    if (!deptMap[dept]) {
+      deptMap[dept] = { department: dept, dot: 0, twentyFour: 0, approved: 0, total: 0 };
+    }
+    deptMap[dept].total++;
+    const isDot = r.isDot || (String(r.shiftName).toLowerCase().includes('off') && String(r.present).toLowerCase() === 'yes');
+    const is24 = r.is24Hours || Number(r.workHrs || 0) >= 19;
+    if (isDot) deptMap[dept].dot++;
+    if (is24) deptMap[dept].twentyFour++;
+    if (r.vinodStatus === 'APPROVED') deptMap[dept].approved++;
+  });
+  const deptChartData = Object.values(deptMap).sort((a, b) => b.total - a.total);
+
+  // Unit-Wise Chart Data
+  const unitMap = {};
+  records.forEach(r => {
+    const unit = r.unit || 'General';
+    if (!unitMap[unit]) {
+      unitMap[unit] = { unit: unit, dot: 0, twentyFour: 0, approved: 0, total: 0 };
+    }
+    unitMap[unit].total++;
+    const isDot = r.isDot || (String(r.shiftName).toLowerCase().includes('off') && String(r.present).toLowerCase() === 'yes');
+    const is24 = r.is24Hours || Number(r.workHrs || 0) >= 19;
+    if (isDot) unitMap[unit].dot++;
+    if (is24) unitMap[unit].twentyFour++;
+    if (r.vinodStatus === 'APPROVED') unitMap[unit].approved++;
+  });
+  const unitChartData = Object.values(unitMap).sort((a, b) => b.total - a.total);
+
+  // Dedicated 24 Hours Duty Breakdown Data
+  const twentyFourHoursChartData = [
+    { range: '19.0h - 21.9h', count: 0, fill: '#60a5fa' },
+    { range: '22.0h - 23.9h', count: 0, fill: '#3b82f6' },
+    { range: '24.0h - 24.2h', count: 0, fill: '#2563eb' },
+    { range: '> 24.2h (Extreme)', count: 0, fill: '#1d4ed8' }
+  ];
+  let twentyFourHoursSum = 0;
+  let maxTwentyFourHours = 0;
+  twentyFourRecordsList.forEach(r => {
+    const h = Number(r.workHrs || 0);
+    twentyFourHoursSum += h;
+    if (h > maxTwentyFourHours) maxTwentyFourHours = h;
+    if (h < 22) twentyFourHoursChartData[0].count++;
+    else if (h < 24) twentyFourHoursChartData[1].count++;
+    else if (h <= 24.2) twentyFourHoursChartData[2].count++;
+    else twentyFourHoursChartData[3].count++;
+  });
+  const avgTwentyFourHours = twentyFourHrsCount > 0 ? (twentyFourHoursSum / twentyFourHrsCount).toFixed(2) : 0;
+
+  // 24 Hours by Department Data
+  const twentyFourDeptMap = {};
+  twentyFourRecordsList.forEach(r => {
+    const d = r.department || 'General';
+    twentyFourDeptMap[d] = (twentyFourDeptMap[d] || 0) + 1;
+  });
+  const twentyFourDeptData = Object.entries(twentyFourDeptMap)
+    .map(([department, count]) => ({ department, count }))
+    .sort((a, b) => b.count - a.count);
 
   // Analytics chart datasets for this date
   const approvalChartData = [
@@ -391,17 +513,17 @@ export default function AttendanceAuditView({ user }) {
     { name: 'Not Approved', count: notApprovedCount, fill: '#f43f5e' }
   ];
 
-  // Double OT Qualification Criteria: Shift = Off (Worked on Off Day) vs Work Hrs >= 19h
+  // Double OT vs 24 Hours Duty Criteria Comparison
   const dotCriteriaChartData = [
     {
-      name: 'Shift = Off (Worked on Off Day)',
-      count: offShiftCount,
+      name: 'Double OT (Shift = Off)',
+      count: dotCount,
       fill: '#a855f7'
     },
     {
-      name: 'Work Hrs >= 19h',
-      count: highHoursCount,
-      fill: '#3b82f6'
+      name: '24 Hours Duty (Work Hrs ≥ 19h)',
+      count: twentyFourHrsCount,
+      fill: '#f59e0b'
     }
   ];
 
@@ -463,13 +585,13 @@ export default function AttendanceAuditView({ user }) {
         </div>
       )}
 
-      {/* Date Selector & KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* Date Selector & Distinct 5 KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
         {/* Date Selector Box */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-2xs flex flex-col justify-between">
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5 text-blue-500" /> Select Attendance Date:
+              <Calendar className="w-3.5 h-3.5 text-blue-500" /> Select Date:
             </label>
             {availableDates.length > 0 ? (
               <select
@@ -478,56 +600,71 @@ export default function AttendanceAuditView({ user }) {
                   setSelectedDate(e.target.value);
                   loadAuditData(e.target.value);
                 }}
-                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-white bg-white dark:bg-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                className="w-full px-2.5 py-1.5 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-white bg-white dark:bg-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
               >
                 {availableDates.map(d => (
-                  <option key={d} value={d}>Report Date: {d}</option>
+                  <option key={d} value={d}>Report: {d}</option>
                 ))}
               </select>
             ) : (
-              <p className="text-xs text-slate-400 italic">No attendance files processed yet.</p>
+              <p className="text-xs text-slate-400 italic">No reports loaded.</p>
             )}
           </div>
           {auditData && (
-            <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400">
-              Uploaded by: <span className="font-semibold text-slate-700 dark:text-slate-200">{auditData.uploadedBy}</span>
-              {auditData.totalReportRows > 0 && (
-                <div>Total biometric rows: <span className="font-semibold">{auditData.totalReportRows}</span></div>
-              )}
+            <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400">
+              <div>By: <span className="font-semibold text-slate-700 dark:text-slate-200">{auditData.uploadedBy}</span></div>
               {canManage && (
                 <button
                   type="button"
                   onClick={handleDeleteReport}
-                  className="mt-2.5 w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-900 transition-colors cursor-pointer"
+                  className="mt-2 w-full inline-flex items-center justify-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-900 transition-colors cursor-pointer"
                   title="Permanently delete this day's Double OT report for all users"
                 >
-                  <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-                  <span>Delete Day Report (For All)</span>
+                  <Trash2 className="w-3 h-3 text-rose-600" />
+                  <span>Delete Day Report</span>
                 </button>
               )}
             </div>
           )}
         </div>
 
-        {/* KPI: Total Detected DOT Incidents */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-2xs flex items-center justify-between">
+        {/* KPI: Double OT (Off Day Worked) */}
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-purple-200 dark:border-purple-900/40 p-4 shadow-2xs bg-purple-50/20 dark:bg-purple-950/10 flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Detected DOT Incidents</p>
-            <h3 className="text-2xl font-black text-slate-900 dark:text-white mt-1">{totalIncidents}</h3>
-            <p className="text-[11px] text-slate-400 mt-0.5">Off Shift: {offShiftCount} • ≥19h: {highHoursCount}</p>
+            <p className="text-xs font-bold text-purple-800 dark:text-purple-300 flex items-center gap-1">
+              <ShieldCheck className="w-3.5 h-3.5 text-purple-600" /> Double OT (DOT)
+            </p>
+            <h3 className="text-2xl font-black text-purple-900 dark:text-purple-100 mt-1">{dotCount}</h3>
+            <p className="text-[11px] text-purple-700/80 dark:text-purple-400 mt-0.5 font-medium">Shift = 'Off' & Present = 'Yes'</p>
           </div>
-          <span className="w-11 h-11 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
-            <Clock className="w-5 h-5" />
+          <span className="w-11 h-11 rounded-xl bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 flex items-center justify-center font-bold">
+            <ShieldCheck className="w-6 h-6" />
+          </span>
+        </div>
+
+        {/* KPI: 24 Hours Duty (Work Hrs >= 19h) */}
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-amber-200 dark:border-amber-900/40 p-4 shadow-2xs bg-amber-50/20 dark:bg-amber-950/10 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5 text-amber-600" /> 24 Hours Duty
+            </p>
+            <h3 className="text-2xl font-black text-amber-900 dark:text-amber-100 mt-1">{twentyFourHrsCount}</h3>
+            <p className="text-[11px] text-amber-700/80 dark:text-amber-400 mt-0.5 font-medium">Work Hrs ≥ 19h Continuous</p>
+          </div>
+          <span className="w-11 h-11 rounded-xl bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 flex items-center justify-center font-bold">
+            <Clock className="w-6 h-6" />
           </span>
         </div>
 
         {/* KPI: Approved by Mr. Vinod */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-emerald-200 dark:border-emerald-900/40 p-4 shadow-2xs bg-emerald-50/20 dark:bg-emerald-950/10 flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">Approved by Mr. Vinod</p>
-            <h3 className="text-2xl font-black text-emerald-700 dark:text-emerald-300 mt-1">{approvedCount}</h3>
-            <p className="text-[11px] text-emerald-600/80 dark:text-emerald-400/70 mt-0.5">
-              {totalIncidents > 0 ? `${Math.round((approvedCount / totalIncidents) * 100)}% authorized` : '0%'}
+            <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Vinod Approved
+            </p>
+            <h3 className="text-2xl font-black text-emerald-900 dark:text-emerald-100 mt-1">{approvedCount}</h3>
+            <p className="text-[11px] text-emerald-700/80 dark:text-emerald-400 mt-0.5">
+              {totalIncidents > 0 ? `${Math.round((approvedCount / totalIncidents) * 100)}% of total incidents` : '0%'}
             </p>
           </div>
           <span className="w-11 h-11 rounded-xl bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 flex items-center justify-center font-bold">
@@ -538,11 +675,11 @@ export default function AttendanceAuditView({ user }) {
         {/* KPI: Unauthorized / Not Approved Warning */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-rose-200 dark:border-rose-900/40 p-4 shadow-2xs bg-rose-50/20 dark:bg-rose-950/10 flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold text-rose-700 dark:text-rose-400 flex items-center gap-1">
-              <AlertTriangle className="w-3.5 h-3.5" /> Not Approved / No Request
+            <p className="text-xs font-bold text-rose-800 dark:text-rose-300 flex items-center gap-1">
+              <AlertTriangle className="w-3.5 h-3.5 text-rose-600" /> Not Approved
             </p>
-            <h3 className="text-2xl font-black text-rose-700 dark:text-rose-300 mt-1">{notApprovedCount}</h3>
-            <p className="text-[11px] text-rose-600/80 dark:text-rose-400/70 mt-0.5">
+            <h3 className="text-2xl font-black text-rose-900 dark:text-rose-100 mt-1">{notApprovedCount}</h3>
+            <p className="text-[11px] text-rose-700/80 dark:text-rose-400 mt-0.5">
               {pendingCount > 0 ? `(${pendingCount} pending in portal)` : 'Requires management audit'}
             </p>
           </div>
@@ -552,79 +689,158 @@ export default function AttendanceAuditView({ user }) {
         </div>
       </div>
 
-      {/* Filter Bar & Search */}
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-2xs transition-colors">
-        {/* Status Filter Buttons */}
-        <div className="flex flex-wrap items-center gap-1.5 text-xs">
-          <button
-            onClick={() => setStatusFilter('ALL')}
-            className={`px-3 py-1.5 rounded-lg font-bold transition-colors cursor-pointer ${
-              statusFilter === 'ALL'
-                ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
-            }`}
-          >
-            All Incidents ({records.length})
-          </button>
-          <button
-            onClick={() => setStatusFilter('APPROVED')}
-            className={`px-3 py-1.5 rounded-lg font-bold transition-colors cursor-pointer flex items-center gap-1 ${
-              statusFilter === 'APPROVED'
-                ? 'bg-emerald-600 text-white'
-                : 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100'
-            }`}
-          >
-            <CheckCircle2 className="w-3.5 h-3.5" /> Vinod Approved ({approvedCount})
-          </button>
-          <button
-            onClick={() => setStatusFilter('NOT_APPROVED')}
-            className={`px-3 py-1.5 rounded-lg font-bold transition-colors cursor-pointer flex items-center gap-1 ${
-              statusFilter === 'NOT_APPROVED'
-                ? 'bg-rose-600 text-white'
-                : 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 hover:bg-rose-100'
-            }`}
-          >
-            <XCircle className="w-3.5 h-3.5" /> Not Approved ({notApprovedCount})
-          </button>
-          <button
-            onClick={() => setStatusFilter('OFF_SHIFT')}
-            className={`px-3 py-1.5 rounded-lg font-bold transition-colors cursor-pointer ${
-              statusFilter === 'OFF_SHIFT'
-                ? 'bg-purple-600 text-white'
-                : 'bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 hover:bg-purple-100'
-            }`}
-          >
-            Off Shift ({offShiftCount})
-          </button>
-          <button
-            onClick={() => setStatusFilter('HIGH_HOURS')}
-            className={`px-3 py-1.5 rounded-lg font-bold transition-colors cursor-pointer ${
-              statusFilter === 'HIGH_HOURS'
-                ? 'bg-amber-600 text-white'
-                : 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 hover:bg-amber-100'
-            }`}
-          >
-            ≥19 Hours ({highHoursCount})
-          </button>
+      {/* Filter Bar: Category, Status, Department, Unit, and Search */}
+      <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3 shadow-2xs transition-colors">
+        {/* Row 1: Category Filter & Status Filter Pills */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
+          {/* Category Filter Pills (Double OT vs 24 Hours) */}
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1">Category:</span>
+            <button
+              onClick={() => setCategoryFilter('ALL')}
+              className={`px-3 py-1.5 rounded-lg font-bold transition-colors cursor-pointer ${
+                categoryFilter === 'ALL'
+                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+              }`}
+            >
+              All Incidents ({totalIncidents})
+            </button>
+            <button
+              onClick={() => setCategoryFilter('DOT')}
+              className={`px-3 py-1.5 rounded-lg font-bold transition-colors cursor-pointer flex items-center gap-1 ${
+                categoryFilter === 'DOT'
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 hover:bg-purple-100'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5" /> Double OT ({dotCount})
+            </button>
+            <button
+              onClick={() => setCategoryFilter('24_HRS')}
+              className={`px-3 py-1.5 rounded-lg font-bold transition-colors cursor-pointer flex items-center gap-1 ${
+                categoryFilter === '24_HRS'
+                  ? 'bg-amber-600 text-white'
+                  : 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 hover:bg-amber-100'
+              }`}
+            >
+              <Clock className="w-3.5 h-3.5" /> 24 Hours Duty ({twentyFourHrsCount})
+            </button>
+          </div>
+
+          {/* Approval Status Filter Pills */}
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1">Vinod Status:</span>
+            <button
+              onClick={() => setStatusFilter('ALL')}
+              className={`px-2.5 py-1.5 rounded-lg font-bold transition-colors cursor-pointer text-xs ${
+                statusFilter === 'ALL'
+                  ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+              }`}
+            >
+              All Status
+            </button>
+            <button
+              onClick={() => setStatusFilter('APPROVED')}
+              className={`px-2.5 py-1.5 rounded-lg font-bold transition-colors cursor-pointer text-xs flex items-center gap-1 ${
+                statusFilter === 'APPROVED'
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100'
+              }`}
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" /> Approved ({approvedCount})
+            </button>
+            <button
+              onClick={() => setStatusFilter('NOT_APPROVED')}
+              className={`px-2.5 py-1.5 rounded-lg font-bold transition-colors cursor-pointer text-xs flex items-center gap-1 ${
+                statusFilter === 'NOT_APPROVED'
+                  ? 'bg-rose-600 text-white'
+                  : 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 hover:bg-rose-100'
+              }`}
+            >
+              <XCircle className="w-3.5 h-3.5" /> Not Approved ({notApprovedCount})
+            </button>
+            {pendingCount > 0 && (
+              <button
+                onClick={() => setStatusFilter('PENDING')}
+                className={`px-2.5 py-1.5 rounded-lg font-bold transition-colors cursor-pointer text-xs flex items-center gap-1 ${
+                  statusFilter === 'PENDING'
+                    ? 'bg-amber-600 text-white'
+                    : 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 hover:bg-amber-100'
+                }`}
+              >
+                <Clock className="w-3.5 h-3.5" /> Pending ({pendingCount})
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* Search & Present Toggle */}
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={presentOnly}
-              onChange={(e) => setPresentOnly(e.target.checked)}
-              className="rounded text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
-            />
-            <span>Present Only (Attended)</span>
-          </label>
+        {/* Row 2: Department Dropdown, Unit Dropdown, Present Only Toggle, Search */}
+        <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Department Dropdown */}
+            <div className="flex items-center gap-1.5">
+              <Building className="w-3.5 h-3.5 text-slate-400" />
+              <label className="font-bold text-slate-600 dark:text-slate-300">Dept:</label>
+              <select
+                value={selectedDeptFilter}
+                onChange={(e) => {
+                  setSelectedDeptFilter(e.target.value);
+                  setSelectedUnitFilter('ALL');
+                }}
+                className="px-2.5 py-1.5 border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-800 dark:text-white font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="ALL">All Departments ({records.length})</option>
+                {uniqueDepartments.map(dept => {
+                  const cnt = records.filter(r => (r.department || 'General') === dept).length;
+                  return (
+                    <option key={dept} value={dept}>{dept} ({cnt})</option>
+                  );
+                })}
+              </select>
+            </div>
 
-          <div className="relative min-w-[200px]">
+            {/* Unit Dropdown */}
+            <div className="flex items-center gap-1.5">
+              <Layers className="w-3.5 h-3.5 text-slate-400" />
+              <label className="font-bold text-slate-600 dark:text-slate-300">Unit:</label>
+              <select
+                value={selectedUnitFilter}
+                onChange={(e) => setSelectedUnitFilter(e.target.value)}
+                className="px-2.5 py-1.5 border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-800 dark:text-white font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="ALL">All Units ({availableUnitsForDept.length})</option>
+                {availableUnitsForDept.map(unit => {
+                  const cnt = records.filter(r => 
+                    (selectedDeptFilter === 'ALL' || (r.department || 'General') === selectedDeptFilter) && 
+                    (r.unit || 'General') === unit
+                  ).length;
+                  return (
+                    <option key={unit} value={unit}>{unit} ({cnt})</option>
+                  );
+                })}
+              </select>
+            </div>
+
+            {/* Present Only Toggle */}
+            <label className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-300 cursor-pointer select-none ml-1">
+              <input
+                type="checkbox"
+                checked={presentOnly}
+                onChange={(e) => setPresentOnly(e.target.checked)}
+                className="rounded text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+              />
+              <span>Present Only (Attended)</span>
+            </label>
+          </div>
+
+          {/* Search box */}
+          <div className="relative min-w-[240px]">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"
-              placeholder="Search EPF, Name, Dept..."
+              placeholder="Search EPF, Name, Dept, Unit, Shift..."
               value={searchFilter}
               onChange={(e) => setSearchFilter(e.target.value)}
               className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-800 dark:text-white placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
@@ -635,13 +851,13 @@ export default function AttendanceAuditView({ user }) {
 
       {/* Main Reconciliation Table */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs overflow-hidden transition-colors">
-        <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
             <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-              Double OT Reconciliation Table ({filteredRecords.length} records)
+              Double OT & 24 Hours Reconciliation Table ({filteredRecords.length} records)
             </h3>
             <span className="text-[11px] text-slate-400">
-              Conditions: (Shift Name = 'Off' and Present = 'Yes') OR (Work Hrs ≥ 19)
+              Double OT: (Shift = 'Off' & Present = 'Yes') • 24 Hours Duty: (Work Hrs ≥ 19)
             </span>
           </div>
 
@@ -662,17 +878,20 @@ export default function AttendanceAuditView({ user }) {
                   const ws = XLSX.utils.json_to_sheet(filteredRecords.map(r => ({
                     'EPF NO': r.epfNo,
                     'Full Name': r.fullName,
+                    'Department': r.department || 'General',
+                    'Unit': r.unit || 'General',
+                    'Category': r.isDot && r.is24Hours ? 'Both (Off Day & 24h)' : (r.isDot ? 'Double OT (Off Day)' : '24 Hours Duty'),
                     'Shift Name': r.shiftName,
                     'Present': r.present,
                     'First Date': r.firstDate,
                     'Work Hrs': r.workHrs,
-                    'DOT Reason': r.dotReason,
+                    'DOT / Duty Reason': r.dotReason,
                     'Mr. Vinod Approval': r.vinodStatus,
                     'Req Number': r.vinodReqNumber || 'None'
                   })));
                   const wb = XLSX.utils.book_new();
-                  XLSX.utils.book_append_sheet(wb, ws, 'DOT_Audit');
-                  XLSX.writeFile(wb, `DOT_Attendance_Audit_${selectedDate || 'Report'}.xlsx`);
+                  XLSX.utils.book_append_sheet(wb, ws, 'DOT_24Hrs_Audit');
+                  XLSX.writeFile(wb, `DOT_24Hrs_Attendance_Audit_${selectedDate || 'Report'}.xlsx`);
                 }}
                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
               >
@@ -694,154 +913,195 @@ export default function AttendanceAuditView({ user }) {
           </div>
         ) : filteredRecords.length === 0 ? (
           <div className="p-8 text-center text-xs text-slate-400">
-            No Double OT records matching the selected filter.
+            No Double OT or 24 Hours Duty records matching the selected filter.
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800 text-xs text-left">
               <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 font-semibold">
                 <tr>
-                  <th className="py-3 px-4">Number (EPF NO)</th>
-                  <th className="py-3 px-4">Full Name (Auto-Matched)</th>
-                  <th className="py-3 px-4">Shift Name</th>
-                  <th className="py-3 px-4 text-center">Present</th>
-                  <th className="py-3 px-4">First Date</th>
-                  <th className="py-3 px-4 text-center">Work Hrs</th>
-                  <th className="py-3 px-4">DOT Reason</th>
-                  <th className="py-3 px-4 text-right">Mr. Vinod Approval</th>
-                  {canManage && <th className="py-3 px-4 text-center">Manage</th>}
+                  <th className="py-3 px-3">Number (EPF)</th>
+                  <th className="py-3 px-3">Full Name (Auto-Matched)</th>
+                  <th className="py-3 px-3">Department</th>
+                  <th className="py-3 px-3">Unit</th>
+                  <th className="py-3 px-3">Category</th>
+                  <th className="py-3 px-3">Shift Name</th>
+                  <th className="py-3 px-3 text-center">Present</th>
+                  <th className="py-3 px-3">First Date</th>
+                  <th className="py-3 px-3 text-center">Work Hrs</th>
+                  <th className="py-3 px-3">DOT / Duty Reason</th>
+                  <th className="py-3 px-3 text-right">Mr. Vinod Approval</th>
+                  {canManage && <th className="py-3 px-3 text-center">Manage</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
-                {filteredRecords.map((r, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                    {/* 1. EPF Number */}
-                    <td className="py-3 px-4 font-mono font-bold text-blue-700 dark:text-blue-400">
-                      {r.epfNo}
-                    </td>
+                {filteredRecords.map((r, idx) => {
+                  const isOffDay = r.isDot || (String(r.shiftName).toLowerCase().includes('off') && String(r.present).toLowerCase() === 'yes');
+                  const is24h = r.is24Hours || Number(r.workHrs || 0) >= 19;
 
-                    {/* 2. Full Name (Auto-Matched) */}
-                    <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white">
-                      {r.fullName}
-                    </td>
-
-                    {/* 3. Shift Name */}
-                    <td className="py-3 px-4">
-                      <span className={`px-2 py-0.5 rounded font-bold text-[11px] ${
-                        String(r.shiftName).toLowerCase() === 'off'
-                          ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
-                          : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                      }`}>
-                        {r.shiftName}
-                      </span>
-                    </td>
-
-                    {/* 4. Present */}
-                    <td className="py-3 px-4 text-center">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        String(r.present).toLowerCase() === 'yes'
-                          ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300'
-                          : 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300'
-                      }`}>
-                        {r.present}
-                      </span>
-                    </td>
-
-                    {/* 5. First Date */}
-                    <td className="py-3 px-4 text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                      {r.firstDate}
-                    </td>
-
-                    {/* 6. Work Hrs */}
-                    <td className="py-3 px-4 text-center font-bold">
-                      <span className={`px-2 py-0.5 rounded ${
-                        r.workHrs >= 19
-                          ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 font-black'
-                          : 'text-slate-800 dark:text-slate-200'
-                      }`}>
-                        {r.workHrs}h
-                      </span>
-                    </td>
-
-                    {/* DOT Reason */}
-                    <td className="py-3 px-4">
-                      <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                        {r.workHrs >= 19 && <Clock className="w-3 h-3 text-amber-500" />}
-                        {String(r.shiftName).toLowerCase() === 'off' && <ShieldCheck className="w-3 h-3 text-purple-500" />}
-                        {r.dotReason}
-                      </span>
-                    </td>
-
-                    {/* Mr. Vinod Approval Status */}
-                    <td className="py-3 px-4 text-right whitespace-nowrap">
-                      {r.vinodStatus === 'APPROVED' ? (
-                        <div className="inline-flex flex-col items-end">
-                          <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1 shadow-2xs">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>Approved by Mr. Vinod</span>
-                          </span>
-                          {r.vinodReqNumber && (
-                            <span className="text-[10px] font-mono text-emerald-700 dark:text-emerald-400 mt-0.5">
-                              {r.vinodReqNumber}
-                            </span>
-                          )}
-                        </div>
-                      ) : r.vinodStatus === 'PENDING' ? (
-                        <div className="inline-flex flex-col items-end">
-                          <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5 text-amber-600" />
-                            <span>Pending Approval</span>
-                          </span>
-                          {r.vinodReqNumber && (
-                            <span className="text-[10px] font-mono text-amber-700 dark:text-amber-400 mt-0.5">
-                              {r.vinodReqNumber}
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="inline-flex flex-col items-end">
-                          <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-800 flex items-center gap-1 shadow-2xs">
-                            <XCircle className="w-3.5 h-3.5 text-rose-600" />
-                            <span>Not Approved / No Request</span>
-                          </span>
-                          <span className="text-[10px] text-rose-600/80 dark:text-rose-400 mt-0.5">
-                            Unauthorized OT
-                          </span>
-                        </div>
-                      )}
-                    </td>
-
-                    {/* Management Action Buttons for Nimesh / Admin */}
-                    {canManage && (
-                      <td className="py-3 px-4 text-center whitespace-nowrap">
-                        <div className="inline-flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingRecord(r);
-                              setEditShiftName(r.shiftName || 'Off');
-                              setEditPresent(r.present || 'Yes');
-                              setEditWorkHrs(r.workHrs || 0);
-                              setEditDotReason(r.dotReason || '');
-                            }}
-                            className="p-1 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                            title="Edit this employee's Double OT record"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteRecord(r._id, r.epfNo, r.fullName)}
-                            className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                            title="Remove this employee from Double OT audit"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                  return (
+                    <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                      {/* 1. EPF Number */}
+                      <td className="py-3 px-3 font-mono font-bold text-blue-700 dark:text-blue-400 whitespace-nowrap">
+                        {r.epfNo}
                       </td>
-                    )}
-                  </tr>
-                ))}
+
+                      {/* 2. Full Name (Auto-Matched) */}
+                      <td className="py-3 px-3 font-semibold text-slate-900 dark:text-white">
+                        {r.fullName}
+                      </td>
+
+                      {/* 3. Department Column */}
+                      <td className="py-3 px-3">
+                        <span className="font-semibold text-slate-800 dark:text-slate-200">
+                          {r.department || 'General'}
+                        </span>
+                      </td>
+
+                      {/* 4. Unit Column */}
+                      <td className="py-3 px-3">
+                        <span className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                          {r.unit || 'General'}
+                        </span>
+                      </td>
+
+                      {/* 5. Distinct Category Badge */}
+                      <td className="py-3 px-3 whitespace-nowrap">
+                        {isOffDay && is24h ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 border border-blue-300 dark:border-blue-800">
+                            Off Day & 24h
+                          </span>
+                        ) : isOffDay ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 border border-purple-300 dark:border-purple-800 inline-flex items-center gap-1">
+                            <ShieldCheck className="w-3 h-3 text-purple-600" /> Double OT
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 inline-flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-amber-600" /> 24 Hours Duty
+                          </span>
+                        )}
+                      </td>
+
+                      {/* 6. Shift Name */}
+                      <td className="py-3 px-3">
+                        <span className={`px-2 py-0.5 rounded font-bold text-[11px] ${
+                          String(r.shiftName).toLowerCase() === 'off'
+                            ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                        }`}>
+                          {r.shiftName}
+                        </span>
+                      </td>
+
+                      {/* 7. Present */}
+                      <td className="py-3 px-3 text-center">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          String(r.present).toLowerCase() === 'yes'
+                            ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300'
+                            : 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300'
+                        }`}>
+                          {r.present}
+                        </span>
+                      </td>
+
+                      {/* 8. First Date */}
+                      <td className="py-3 px-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                        {r.firstDate}
+                      </td>
+
+                      {/* 9. Work Hrs */}
+                      <td className="py-3 px-3 text-center font-bold">
+                        <span className={`px-2 py-0.5 rounded font-mono ${
+                          r.workHrs >= 19
+                            ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200 font-black'
+                            : 'text-slate-800 dark:text-slate-200'
+                        }`}>
+                          {r.workHrs}h
+                        </span>
+                      </td>
+
+                      {/* 10. DOT / Duty Reason */}
+                      <td className="py-3 px-3">
+                        <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                          {is24h && <Clock className="w-3 h-3 text-amber-500" />}
+                          {isOffDay && <ShieldCheck className="w-3 h-3 text-purple-500" />}
+                          {r.dotReason}
+                        </span>
+                      </td>
+
+                      {/* 11. Mr. Vinod Approval Status */}
+                      <td className="py-3 px-3 text-right whitespace-nowrap">
+                        {r.vinodStatus === 'APPROVED' ? (
+                          <div className="inline-flex flex-col items-end">
+                            <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1 shadow-2xs">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>Approved by Mr. Vinod</span>
+                            </span>
+                            {r.vinodReqNumber && (
+                              <span className="text-[10px] font-mono text-emerald-700 dark:text-emerald-400 mt-0.5">
+                                {r.vinodReqNumber}
+                              </span>
+                            )}
+                          </div>
+                        ) : r.vinodStatus === 'PENDING' ? (
+                          <div className="inline-flex flex-col items-end">
+                            <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 flex items-center gap-1">
+                              <Clock className="w-3.5 h-3.5 text-amber-600" />
+                              <span>Pending Approval</span>
+                            </span>
+                            {r.vinodReqNumber && (
+                              <span className="text-[10px] font-mono text-amber-700 dark:text-amber-400 mt-0.5">
+                                {r.vinodReqNumber}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="inline-flex flex-col items-end">
+                            <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-800 flex items-center gap-1 shadow-2xs">
+                              <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                              <span>Not Approved / No Request</span>
+                            </span>
+                            <span className="text-[10px] text-rose-600/80 dark:text-rose-400 mt-0.5">
+                              Unauthorized OT
+                            </span>
+                          </div>
+                        )}
+                      </td>
+
+                      {/* 12. Management Actions */}
+                      {canManage && (
+                        <td className="py-3 px-3 text-center whitespace-nowrap">
+                          <div className="inline-flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingRecord(r);
+                                setEditShiftName(r.shiftName || 'Off');
+                                setEditPresent(r.present || 'Yes');
+                                setEditWorkHrs(r.workHrs || 0);
+                                setEditDotReason(r.dotReason || '');
+                                setEditDepartment(r.department || '');
+                                setEditUnit(r.unit || '');
+                              }}
+                              className="p-1 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                              title="Edit this employee's record"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteRecord(r._id, r.epfNo, r.fullName)}
+                              className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                              title="Remove this employee from audit"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -858,83 +1118,267 @@ export default function AttendanceAuditView({ user }) {
               </span>
               <div>
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <span>Double OT Reconciliation Visual Analytics & Graphs</span>
+                  <span>Double OT & 24 Hours Duty Visual Analytics</span>
                   <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                     {selectedDate}
                   </span>
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Graphical analysis for {records.length} Double OT incidents (Shift = Off vs Work Hrs ≥ 19h vs Mr. Vinod Approvals)
+                  Visual breakdown across Departments, Units, 24 Hours Duty shifts, and Mr. Vinod's Approvals
                 </p>
               </div>
             </div>
 
             {/* Sub-tab view toggle */}
-            <div className="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-xs">
+            <div className="flex flex-wrap rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-xs gap-1">
               <button
                 onClick={() => setGraphTab('all')}
                 className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
                   graphTab === 'all'
                     ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-300 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 All Visuals
               </button>
               <button
-                onClick={() => setGraphTab('status')}
-                className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                  graphTab === 'status'
-                    ? 'bg-white dark:bg-slate-700 text-emerald-700 dark:text-emerald-300 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400'
+                onClick={() => setGraphTab('dept')}
+                className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                  graphTab === 'dept'
+                    ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                Vinod Approval
+                <Building className="w-3.5 h-3.5" /> Department-Wise
               </button>
               <button
-                onClick={() => setGraphTab('criteria')}
-                className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                  graphTab === 'criteria'
+                onClick={() => setGraphTab('unit')}
+                className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                  graphTab === 'unit'
                     ? 'bg-white dark:bg-slate-700 text-purple-700 dark:text-purple-300 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                DOT Criteria (Shift Off / ≥19h)
+                <Layers className="w-3.5 h-3.5" /> Unit-Wise
+              </button>
+              <button
+                onClick={() => setGraphTab('24hrs')}
+                className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                  graphTab === '24hrs'
+                    ? 'bg-white dark:bg-slate-700 text-amber-700 dark:text-amber-300 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <Clock className="w-3.5 h-3.5" /> 24 Hours Duty ({twentyFourHrsCount})
+              </button>
+              <button
+                onClick={() => setGraphTab('status')}
+                className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                  graphTab === 'status'
+                    ? 'bg-white dark:bg-slate-700 text-emerald-700 dark:text-emerald-300 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" /> Vinod Approval
               </button>
             </div>
           </div>
 
           {/* Quick Metrics Bar */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800">
-              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">Total DOT Incidents</span>
-              <span className="text-xl font-black text-slate-900 dark:text-white mt-0.5 block">{records.length}</span>
+            <div className="p-3.5 rounded-xl bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/60">
+              <span className="text-[11px] font-semibold text-purple-700 dark:text-purple-400 block">Double OT (Shift = Off)</span>
+              <span className="text-xl font-black text-purple-900 dark:text-purple-200 mt-0.5 block">
+                {dotCount} <span className="text-xs font-semibold">({records.length > 0 ? Math.round((dotCount / records.length) * 100) : 0}%)</span>
+              </span>
+            </div>
+            <div className="p-3.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60">
+              <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 block">24 Hours Duty (Work Hrs ≥ 19h)</span>
+              <span className="text-xl font-black text-amber-900 dark:text-amber-200 mt-0.5 block">
+                {twentyFourHrsCount} <span className="text-xs font-semibold">({records.length > 0 ? Math.round((twentyFourHrsCount / records.length) * 100) : 0}%)</span>
+              </span>
             </div>
             <div className="p-3.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60">
-              <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 block">Authorized by Vinod Sir</span>
-              <span className="text-xl font-black text-emerald-700 dark:text-emerald-300 mt-0.5 block">
+              <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 block">Authorized by Mr. Vinod</span>
+              <span className="text-xl font-black text-emerald-900 dark:text-emerald-200 mt-0.5 block">
                 {approvedCount} <span className="text-xs font-semibold">({records.length > 0 ? Math.round((approvedCount / records.length) * 100) : 0}%)</span>
               </span>
             </div>
-            <div className="p-3.5 rounded-xl bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/60">
-              <span className="text-[11px] font-semibold text-purple-700 dark:text-purple-400 block">Shift = Off (Worked on Off Day)</span>
-              <span className="text-xl font-black text-purple-700 dark:text-purple-300 mt-0.5 block">
-                {offShiftCount} <span className="text-xs font-semibold">({records.length > 0 ? Math.round((offShiftCount / records.length) * 100) : 0}%)</span>
-              </span>
-            </div>
-            <div className="p-3.5 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/60">
-              <span className="text-[11px] font-semibold text-blue-700 dark:text-blue-400 block">Work Hrs ≥ 19h</span>
-              <span className="text-xl font-black text-blue-700 dark:text-blue-300 mt-0.5 block">
-                {highHoursCount} <span className="text-xs font-semibold">({records.length > 0 ? Math.round((highHoursCount / records.length) * 100) : 0}%)</span>
+            <div className="p-3.5 rounded-xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/60">
+              <span className="text-[11px] font-semibold text-rose-700 dark:text-rose-400 block">Not Approved / No Request</span>
+              <span className="text-xl font-black text-rose-900 dark:text-rose-200 mt-0.5 block">
+                {notApprovedCount} <span className="text-xs font-semibold">({records.length > 0 ? Math.round((notApprovedCount / records.length) * 100) : 0}%)</span>
               </span>
             </div>
           </div>
 
-          {/* Charts Area: 2 Focused Double OT Analytics Charts */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Chart 1: Approval Status */}
+          {/* CHARTS CONTAINER */}
+          <div className="space-y-6">
+            {/* 1. DEPARTMENT-WISE GRAPH */}
+            {(graphTab === 'all' || graphTab === 'dept') && (
+              <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                    <Building className="w-3.5 h-3.5 text-blue-500" />
+                    Department-Wise Breakdown: Double OT vs 24 Hours Duty vs Vinod Approved
+                  </h4>
+                  <span className="text-[10px] text-slate-400">Headcount by Department</span>
+                </div>
+                <div className="h-72 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={deptChartData} margin={{ top: 10, right: 10, left: -20, bottom: 25 }}>
+                      <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                      <XAxis dataKey="department" tick={{ fontSize: 11 }} interval={0} angle={-10} textAnchor="end" />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#1e293b',
+                          borderColor: '#334155',
+                          borderRadius: '10px',
+                          color: '#fff',
+                          fontSize: '12px'
+                        }}
+                      />
+                      <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                      <Bar dataKey="dot" name="Double OT (Off Day)" fill="#a855f7" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="twentyFour" name="24 Hours Duty" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="approved" name="Vinod Approved" fill="#10b981" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+
+            {/* 2. UNIT-WISE GRAPH */}
+            {(graphTab === 'all' || graphTab === 'unit') && (
+              <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                    <Layers className="w-3.5 h-3.5 text-purple-500" />
+                    Unit-Wise Distribution: Double OT vs 24 Hours Duty
+                  </h4>
+                  <span className="text-[10px] text-slate-400">Headcount by Factory Unit</span>
+                </div>
+                <div className="h-72 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={unitChartData} margin={{ top: 10, right: 10, left: -20, bottom: 25 }}>
+                      <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                      <XAxis dataKey="unit" tick={{ fontSize: 11 }} interval={0} angle={-15} textAnchor="end" />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#1e293b',
+                          borderColor: '#334155',
+                          borderRadius: '10px',
+                          color: '#fff',
+                          fontSize: '12px'
+                        }}
+                      />
+                      <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                      <Bar dataKey="dot" name="Double OT (Off Day)" fill="#a855f7" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="twentyFour" name="24 Hours Duty" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+
+            {/* 3. DEDICATED 24 HOURS DUTY SECTION */}
+            {(graphTab === 'all' || graphTab === '24hrs') && (
+              <div className="p-5 rounded-2xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/20 dark:bg-amber-950/10 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-amber-200/60 dark:border-amber-900/40">
+                  <div className="flex items-center gap-2">
+                    <span className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 flex items-center justify-center font-bold">
+                      <Clock className="w-4 h-4 text-amber-600" />
+                    </span>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <span>24 Hours Duty Dedicated Analytics (Work Hrs ≥ 19h)</span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200/80 dark:bg-amber-900 text-amber-900 dark:text-amber-200">
+                          {twentyFourHrsCount} Continuous Workers
+                        </span>
+                      </h4>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Classified strictly as 24 Hours Duty separate from Double OT
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 text-xs">
+                    <span className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-900 font-bold text-amber-800 dark:text-amber-300">
+                      Avg Shift: <span className="font-mono">{avgTwentyFourHours}h</span>
+                    </span>
+                    <span className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-900 font-bold text-amber-800 dark:text-amber-300">
+                      Max Shift: <span className="font-mono">{maxTwentyFourHours}h</span>
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {/* Chart 3A: Continuous Hours Range Breakdown */}
+                  <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-2">
+                    <h5 className="text-[11px] font-bold text-slate-800 dark:text-slate-200">
+                      Work Hours Range Breakdown (Continuous Shift Duration)
+                    </h5>
+                    <div className="h-56 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={twentyFourHoursChartData} margin={{ top: 10, right: 10, left: -20, bottom: 15 }}>
+                          <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                          <XAxis dataKey="range" tick={{ fontSize: 10 }} />
+                          <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: '#1e293b',
+                              borderColor: '#334155',
+                              borderRadius: '8px',
+                              color: '#fff',
+                              fontSize: '11px'
+                            }}
+                            formatter={(val) => [`${val} Workers`, 'Headcount']}
+                          />
+                          <Bar dataKey="count" radius={[6, 6, 0, 0]}>
+                            {twentyFourHoursChartData.map((entry, index) => (
+                              <Cell key={`twentyFour-cell-${index}`} fill={entry.fill} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  {/* Chart 3B: 24 Hours Duty by Department */}
+                  <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-2">
+                    <h5 className="text-[11px] font-bold text-slate-800 dark:text-slate-200">
+                      24 Hours Workers by Department
+                    </h5>
+                    <div className="h-56 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={twentyFourDeptData} margin={{ top: 10, right: 10, left: -20, bottom: 15 }}>
+                          <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                          <XAxis dataKey="department" tick={{ fontSize: 10 }} />
+                          <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: '#1e293b',
+                              borderColor: '#334155',
+                              borderRadius: '8px',
+                              color: '#fff',
+                              fontSize: '11px'
+                            }}
+                            formatter={(val) => [`${val} Workers`, '24 Hours Duty']}
+                          />
+                          <Bar dataKey="count" fill="#f59e0b" radius={[6, 6, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 4. VINOD APPROVAL STATUS DISTRIBUTION */}
             {(graphTab === 'all' || graphTab === 'status') && (
-              <div className={`p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 space-y-3 ${graphTab === 'status' ? 'lg:col-span-2' : ''}`}>
+              <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 space-y-3">
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
@@ -968,53 +1412,11 @@ export default function AttendanceAuditView({ user }) {
                 </div>
               </div>
             )}
-
-            {/* Chart 2: Double OT Criteria Breakdown (Shift = Off vs Work Hrs >= 19h) */}
-            {(graphTab === 'all' || graphTab === 'criteria') && (
-              <div className={`p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 space-y-3 ${graphTab === 'criteria' ? 'lg:col-span-2' : ''}`}>
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-purple-500"></span>
-                    Double OT Criteria: Shift = Off vs Work Hrs ≥ 19h
-                  </h4>
-                  <span className="text-[10px] text-slate-400">Headcount by DOT Rule</span>
-                </div>
-                <div className="h-64 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={dotCriteriaChartData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
-                      <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                      <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                      <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#1e293b',
-                          borderColor: '#334155',
-                          borderRadius: '10px',
-                          color: '#fff',
-                          fontSize: '12px'
-                        }}
-                        formatter={(val) => [`${val} Employees`, 'Qualified for Double OT']}
-                      />
-                      <Bar dataKey="count" radius={[8, 8, 0, 0]}>
-                        {dotCriteriaChartData.map((entry, index) => (
-                          <Cell key={`criteria-cell-${index}`} fill={entry.fill} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-                {bothCount > 0 && (
-                  <p className="text-[11px] text-slate-400 dark:text-slate-500 text-center italic">
-                    * Note: {bothCount} employees satisfied both conditions (Shift = Off and Work Hrs ≥ 19h).
-                  </p>
-                )}
-              </div>
-            )}
           </div>
         </div>
       )}
 
-      {/* EDIT RECORD MODAL */}
+      {/* EDIT RECORD MODAL (Includes Department and Unit) */}
       {editingRecord && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-md w-full p-6 space-y-4 my-8">
@@ -1036,6 +1438,34 @@ export default function AttendanceAuditView({ user }) {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Department
+                  </label>
+                  <input
+                    type="text"
+                    value={editDepartment}
+                    onChange={(e) => setEditDepartment(e.target.value)}
+                    placeholder="e.g. Production"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Unit
+                  </label>
+                  <input
+                    type="text"
+                    value={editUnit}
+                    onChange={(e) => setEditUnit(e.target.value)}
+                    placeholder="e.g. Mixing, Press Lines"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     Shift Name
                   </label>
                   <input
@@ -1043,7 +1473,7 @@ export default function AttendanceAuditView({ user }) {
                     required
                     value={editShiftName}
                     onChange={(e) => setEditShiftName(e.target.value)}
-                    placeholder="e.g. Off, Day, Night"
+                    placeholder="e.g. Off, Night, Day"
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium"
                   />
                 </div>
@@ -1079,13 +1509,13 @@ export default function AttendanceAuditView({ user }) {
 
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  DOT Reason
+                  DOT / Duty Reason
                 </label>
                 <input
                   type="text"
                   value={editDotReason}
                   onChange={(e) => setEditDotReason(e.target.value)}
-                  placeholder="e.g. Shift = Off (Worked on Off Day)"
+                  placeholder="e.g. Shift = Off (Worked on Off Day) or 24 Hours Duty"
                   className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                 />
               </div>
@@ -1110,7 +1540,7 @@ export default function AttendanceAuditView({ user }) {
         </div>
       )}
 
-      {/* ADD MANUAL RECORD MODAL */}
+      {/* ADD MANUAL RECORD MODAL (Includes Department and Unit) */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-md w-full p-6 space-y-4 my-8">
@@ -1158,17 +1588,32 @@ export default function AttendanceAuditView({ user }) {
                 </div>
               </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Full Name (Optional - auto-matched from EPF)
-                </label>
-                <input
-                  type="text"
-                  placeholder="Leave empty to auto-match"
-                  value={newFullName}
-                  onChange={(e) => setNewFullName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Full Name (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Leave empty to auto-match"
+                    value={newFullName}
+                    onChange={(e) => setNewFullName(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Unit
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Mixing"
+                    value={newUnit}
+                    onChange={(e) => setNewUnit(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-3 gap-3">
