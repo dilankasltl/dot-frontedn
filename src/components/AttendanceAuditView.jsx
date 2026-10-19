@@ -15,7 +15,10 @@ import {
   FileCheck,
   ShieldCheck,
   Building,
-  Info
+  Info,
+  Edit3,
+  PlusCircle,
+  X
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { api } from '../api';
@@ -33,8 +36,25 @@ export default function AttendanceAuditView({ user }) {
   const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL' | 'APPROVED' | 'NOT_APPROVED' | 'PENDING' | 'OFF_SHIFT' | 'HIGH_HOURS'
   const [presentOnly, setPresentOnly] = useState(true); // default: show people who attended/worked
 
-  // Check upload permissions (Mr. Nimesh & Admin)
-  const canUpload = user.username === 'Nimesh' || user.username === 'Admin' || user.role === 'admin';
+  // Check upload & edit permissions (Mr. Nimesh & Admin)
+  const canManage = user.username === 'Nimesh' || user.name?.toLowerCase().includes('nimesh') || user.username === 'Admin' || user.role === 'admin';
+  const canUpload = canManage;
+
+  // Edit single record modal state
+  const [editingRecord, setEditingRecord] = useState(null);
+  const [editShiftName, setEditShiftName] = useState('Off');
+  const [editPresent, setEditPresent] = useState('Yes');
+  const [editWorkHrs, setEditWorkHrs] = useState(0);
+  const [editDotReason, setEditDotReason] = useState('');
+
+  // Add manual record modal state
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newEpfNo, setNewEpfNo] = useState('');
+  const [newFullName, setNewFullName] = useState('');
+  const [newShiftName, setNewShiftName] = useState('Off');
+  const [newPresent, setNewPresent] = useState('Yes');
+  const [newWorkHrs, setNewWorkHrs] = useState(12);
+  const [newDepartment, setNewDepartment] = useState('');
 
   // Load audit data for a given date
   const loadAuditData = async (dateToLoad = '') => {
@@ -231,6 +251,86 @@ export default function AttendanceAuditView({ user }) {
     reader.readAsBinaryString(file);
   };
 
+  // Handle Delete Entire Report for this date
+  const handleDeleteReport = async () => {
+    if (!selectedDate) return;
+    const confirmed = window.confirm(
+      `Are you sure you want to delete the Double OT attendance report for date "${selectedDate}"?\n\nThis will permanently delete the report for ALL users (Mr. Dhammika, Mr. Vinod, Mr. Niranjan, Mr. Rohitha, and Admin).`
+    );
+    if (!confirmed) return;
+
+    setLoading(true);
+    try {
+      await api.deleteAttendanceAudit(selectedDate);
+      setMessage({ type: 'success', text: `Attendance report for ${selectedDate} has been deleted for all users.` });
+      await loadAuditData();
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message || 'Failed to delete attendance report' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle Delete Single Record
+  const handleDeleteRecord = async (recordId, epfNo, name) => {
+    const confirmed = window.confirm(`Remove employee #${epfNo} (${name}) from this date's Double OT audit?`);
+    if (!confirmed) return;
+
+    try {
+      await api.deleteAttendanceAuditRecord(selectedDate, recordId);
+      setMessage({ type: 'success', text: `Employee #${epfNo} removed from audit.` });
+      await loadAuditData(selectedDate);
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message || 'Failed to delete record' });
+    }
+  };
+
+  // Handle Save Edit Record
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    if (!editingRecord) return;
+    try {
+      await api.updateAttendanceAuditRecord(selectedDate, editingRecord._id, {
+        shiftName: editShiftName,
+        present: editPresent,
+        workHrs: Number(editWorkHrs),
+        dotReason: editDotReason || (editShiftName.toLowerCase() === 'off' ? 'Shift = Off (Edited)' : `Work Hrs >= 19h (${editWorkHrs}h)`)
+      });
+      setMessage({ type: 'success', text: `Employee #${editingRecord.epfNo} updated successfully!` });
+      setEditingRecord(null);
+      await loadAuditData(selectedDate);
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message || 'Failed to update record' });
+    }
+  };
+
+  // Handle Add Manual Record
+  const handleAddManualRecord = async (e) => {
+    e.preventDefault();
+    if (!newEpfNo.trim()) {
+      setMessage({ type: 'error', text: 'EPF Number is required' });
+      return;
+    }
+    try {
+      await api.addAttendanceAuditRecord(selectedDate, {
+        epfNo: newEpfNo.trim(),
+        fullName: newFullName.trim(),
+        shiftName: newShiftName,
+        present: newPresent,
+        workHrs: Number(newWorkHrs),
+        department: newDepartment
+      });
+      setMessage({ type: 'success', text: `Employee #${newEpfNo} added to ${selectedDate} audit successfully!` });
+      setShowAddModal(false);
+      setNewEpfNo('');
+      setNewFullName('');
+      setNewWorkHrs(12);
+      await loadAuditData(selectedDate);
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message || 'Failed to add record' });
+    }
+  };
+
   // Filter dot records based on user search and filters
   const records = auditData?.dotRecords || [];
   const filteredRecords = records.filter(r => {
@@ -356,6 +456,17 @@ export default function AttendanceAuditView({ user }) {
               Uploaded by: <span className="font-semibold text-slate-700 dark:text-slate-200">{auditData.uploadedBy}</span>
               {auditData.totalReportRows > 0 && (
                 <div>Total biometric rows: <span className="font-semibold">{auditData.totalReportRows}</span></div>
+              )}
+              {canManage && (
+                <button
+                  type="button"
+                  onClick={handleDeleteReport}
+                  className="mt-2.5 w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-900 transition-colors cursor-pointer"
+                  title="Permanently delete this day's Double OT report for all users"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                  <span>Delete Day Report (For All)</span>
+                </button>
               )}
             </div>
           )}
@@ -497,30 +608,42 @@ export default function AttendanceAuditView({ user }) {
             </span>
           </div>
 
-          {filteredRecords.length > 0 && (
-            <button
-              onClick={() => {
-                const ws = XLSX.utils.json_to_sheet(filteredRecords.map(r => ({
-                  'EPF NO': r.epfNo,
-                  'Full Name': r.fullName,
-                  'Department': r.department,
-                  'Shift Name': r.shiftName,
-                  'Present': r.present,
-                  'First Date': r.firstDate,
-                  'Work Hrs': r.workHrs,
-                  'DOT Reason': r.dotReason,
-                  'Mr. Vinod Approval': r.vinodStatus,
-                  'Req Number': r.vinodReqNumber || 'None'
-                })));
-                const wb = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(wb, ws, 'DOT_Audit');
-                XLSX.writeFile(wb, `DOT_Attendance_Audit_${selectedDate || 'Report'}.xlsx`);
-              }}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5" /> Export Excel
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {canManage && auditData && (
+              <button
+                type="button"
+                onClick={() => setShowAddModal(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors cursor-pointer"
+              >
+                <PlusCircle className="w-3.5 h-3.5" /> + Add Employee
+              </button>
+            )}
+
+            {filteredRecords.length > 0 && (
+              <button
+                onClick={() => {
+                  const ws = XLSX.utils.json_to_sheet(filteredRecords.map(r => ({
+                    'EPF NO': r.epfNo,
+                    'Full Name': r.fullName,
+                    'Department': r.department,
+                    'Shift Name': r.shiftName,
+                    'Present': r.present,
+                    'First Date': r.firstDate,
+                    'Work Hrs': r.workHrs,
+                    'DOT Reason': r.dotReason,
+                    'Mr. Vinod Approval': r.vinodStatus,
+                    'Req Number': r.vinodReqNumber || 'None'
+                  })));
+                  const wb = XLSX.utils.book_new();
+                  XLSX.utils.book_append_sheet(wb, ws, 'DOT_Audit');
+                  XLSX.writeFile(wb, `DOT_Attendance_Audit_${selectedDate || 'Report'}.xlsx`);
+                }}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" /> Export Excel
+              </button>
+            )}
+          </div>
         </div>
 
         {loading ? (
@@ -551,6 +674,7 @@ export default function AttendanceAuditView({ user }) {
                   <th className="py-3 px-4 text-center">Work Hrs</th>
                   <th className="py-3 px-4">DOT Reason</th>
                   <th className="py-3 px-4 text-right">Mr. Vinod Approval</th>
+                  {canManage && <th className="py-3 px-4 text-center">Manage</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
@@ -657,6 +781,36 @@ export default function AttendanceAuditView({ user }) {
                         </div>
                       )}
                     </td>
+
+                    {/* Management Action Buttons for Nimesh / Admin */}
+                    {canManage && (
+                      <td className="py-3 px-4 text-center whitespace-nowrap">
+                        <div className="inline-flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingRecord(r);
+                              setEditShiftName(r.shiftName || 'Off');
+                              setEditPresent(r.present || 'Yes');
+                              setEditWorkHrs(r.workHrs || 0);
+                              setEditDotReason(r.dotReason || '');
+                            }}
+                            className="p-1 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                            title="Edit this employee's Double OT record"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteRecord(r._id, r.epfNo, r.fullName)}
+                            className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                            title="Remove this employee from Double OT audit"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -664,6 +818,226 @@ export default function AttendanceAuditView({ user }) {
           </div>
         )}
       </div>
+
+      {/* EDIT RECORD MODAL */}
+      {editingRecord && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-md w-full p-6 space-y-4 my-8">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Edit3 className="w-5 h-5 text-blue-600" />
+                Edit Record — #{editingRecord.epfNo} ({editingRecord.fullName})
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingRecord(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Shift Name
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editShiftName}
+                    onChange={(e) => setEditShiftName(e.target.value)}
+                    placeholder="e.g. Off, Day, Night"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Present
+                  </label>
+                  <select
+                    value={editPresent}
+                    onChange={(e) => setEditPresent(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium"
+                  >
+                    <option value="Yes">Yes</option>
+                    <option value="No">No</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Work Hours
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={editWorkHrs}
+                  onChange={(e) => setEditWorkHrs(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  DOT Reason
+                </label>
+                <input
+                  type="text"
+                  value={editDotReason}
+                  onChange={(e) => setEditDotReason(e.target.value)}
+                  placeholder="e.g. Shift = Off (Worked on Off Day)"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingRecord(null)}
+                  className="px-4 py-2 rounded-xl font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-xs cursor-pointer"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ADD MANUAL RECORD MODAL */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-md w-full p-6 space-y-4 my-8">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <PlusCircle className="w-5 h-5 text-emerald-600" />
+                Add Employee to {selectedDate} Audit
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleAddManualRecord} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    EPF Number *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. 1195"
+                    value={newEpfNo}
+                    onChange={(e) => setNewEpfNo(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Department
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Production"
+                    value={newDepartment}
+                    onChange={(e) => setNewDepartment(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Full Name (Optional - auto-matched from EPF)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Leave empty to auto-match"
+                  value={newFullName}
+                  onChange={(e) => setNewFullName(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Shift Name
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newShiftName}
+                    onChange={(e) => setNewShiftName(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Present
+                  </label>
+                  <select
+                    value={newPresent}
+                    onChange={(e) => setNewPresent(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium"
+                  >
+                    <option value="Yes">Yes</option>
+                    <option value="No">No</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Work Hrs
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={newWorkHrs}
+                    onChange={(e) => setNewWorkHrs(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="px-4 py-2 rounded-xl font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer"
+                >
+                  Add to Audit
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

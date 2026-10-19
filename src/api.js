@@ -277,7 +277,14 @@ export const api = {
       ? `${API_BASE}/attendance-audit?date=${encodeURIComponent(date)}`
       : `${API_BASE}/attendance-audit`;
     const res = await fetch(url);
-    if (!res.ok) throw new Error('Failed to fetch attendance audit');
+    if (!res.ok) {
+      let msg = 'Failed to fetch attendance audit';
+      try {
+        const err = await res.json();
+        if (err.error) msg = err.error;
+      } catch {}
+      throw new Error(msg);
+    }
     return res.json();
   },
 
@@ -288,6 +295,43 @@ export const api = {
     if (!res.ok) {
       const err = await res.json();
       throw new Error(err.error || 'Failed to delete attendance audit');
+    }
+    return res.json();
+  },
+
+  updateAttendanceAuditRecord: async (reportDate, recordId, updatedFields) => {
+    const res = await fetch(`${API_BASE}/attendance-audit/${encodeURIComponent(reportDate)}/record/${encodeURIComponent(recordId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedFields)
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to update record');
+    }
+    return res.json();
+  },
+
+  deleteAttendanceAuditRecord: async (reportDate, recordId) => {
+    const res = await fetch(`${API_BASE}/attendance-audit/${encodeURIComponent(reportDate)}/record/${encodeURIComponent(recordId)}`, {
+      method: 'DELETE'
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to delete record from audit');
+    }
+    return res.json();
+  },
+
+  addAttendanceAuditRecord: async (reportDate, recordData) => {
+    const res = await fetch(`${API_BASE}/attendance-audit/${encodeURIComponent(reportDate)}/record`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(recordData)
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to add employee record');
     }
     return res.json();
   }
