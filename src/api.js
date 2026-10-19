@@ -256,5 +256,39 @@ export const api = {
       throw new Error(err.error || 'Failed to delete employee');
     }
     return res.json();
+  },
+
+  // --- Daily Attendance Audit & DOT Reconciliation ---
+  saveAttendanceAudit: async (auditData) => {
+    const res = await fetch(`${API_BASE}/attendance-audit/save`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(auditData)
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to save attendance audit');
+    }
+    return res.json();
+  },
+
+  getAttendanceAudit: async (date = '') => {
+    const url = date 
+      ? `${API_BASE}/attendance-audit?date=${encodeURIComponent(date)}`
+      : `${API_BASE}/attendance-audit`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Failed to fetch attendance audit');
+    return res.json();
+  },
+
+  deleteAttendanceAudit: async (reportDate) => {
+    const res = await fetch(`${API_BASE}/attendance-audit/${encodeURIComponent(reportDate)}`, {
+      method: 'DELETE'
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to delete attendance audit');
+    }
+    return res.json();
   }
 };

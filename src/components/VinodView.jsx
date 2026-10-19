@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ShieldCheck, CheckCheck, XSquare, Eye, RefreshCw, BarChart3, ListFilter, CheckCircle2, XCircle, Search, Clock, Trash2, FileSpreadsheet, Bell } from 'lucide-react';
 import RequestDetailModal from './RequestDetailModal';
 import AnalyticsCharts from './AnalyticsCharts';
+import AttendanceAuditView from './AttendanceAuditView';
 import { api } from '../api';
 import { playNotificationSound } from '../utils/sound';
 
@@ -301,11 +302,23 @@ export default function VinodView({ user }) {
             <ListFilter className="w-3.5 h-3.5" />
             <span>All Requests Archive ({requests.length})</span>
           </button>
+
+          <button
+            onClick={() => setActiveTab('attendance_audit')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'attendance_audit'
+                ? 'bg-white dark:bg-slate-700 text-teal-700 dark:text-teal-300 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+            }`}
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-teal-500" />
+            <span>Attendance Audit (DOT Reconciliation)</span>
+          </button>
         </div>
       </div>
 
       {/* Department Filter Pills (RMS, PRODUCTION, WIP, etc.) */}
-      {activeTab !== 'charts' && (
+      {activeTab !== 'charts' && activeTab !== 'attendance_audit' && activeTab !== 'epf_summary' && (
         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-3 transition-colors">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
@@ -592,6 +605,11 @@ export default function VinodView({ user }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* TAB 4: ATTENDANCE AUDIT & DOT RECONCILIATION */}
+      {activeTab === 'attendance_audit' && (
+        <AttendanceAuditView user={user} />
       )}
 
       {selectedRequestForModal && (

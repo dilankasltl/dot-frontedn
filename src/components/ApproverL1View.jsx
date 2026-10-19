@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { CheckCircle2, XCircle, Eye, RefreshCw, CheckCheck, XSquare, Building2, AlertCircle, BarChart3, Trash2, Calendar, FileSpreadsheet, Bell, Clock } from 'lucide-react';
 import RequestDetailModal from './RequestDetailModal';
 import AnalyticsCharts from './AnalyticsCharts';
+import AttendanceAuditView from './AttendanceAuditView';
 import { api } from '../api';
 import { playNotificationSound } from '../utils/sound';
 
@@ -263,10 +264,24 @@ export default function ApproverL1View({ user }) {
             <BarChart3 className="w-3.5 h-3.5 text-blue-500" />
             <span>Department Charts</span>
           </button>
+
+          {canViewAll && (
+            <button
+              onClick={() => setActiveTab('attendance_audit')}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'attendance_audit'
+                  ? 'bg-white dark:bg-slate-700 text-teal-700 dark:text-teal-300 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+              }`}
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-teal-500" />
+              <span>Attendance Audit (DOT Reconciliation)</span>
+            </button>
+          )}
         </div>
 
         {/* Multi-department filter */}
-        {user.approvedDepartments?.length > 1 && activeTab !== 'charts' && (
+        {user.approvedDepartments?.length > 1 && activeTab !== 'charts' && activeTab !== 'attendance_audit' && activeTab !== 'epf_summary' && (
           <div className="flex items-center gap-2 text-xs">
             <span className="text-slate-500 dark:text-slate-400 font-medium">Department:</span>
             <select
@@ -633,6 +648,11 @@ export default function ApproverL1View({ user }) {
           title={canViewAll ? `${user.name} — Plant Operations Double OT Bar Charts & Analytics` : `${user.name} — Department Analytics & Headcount Charts`}
           defaultSubTab="charts"
         />
+      )}
+
+      {/* TAB 5: ATTENDANCE AUDIT & DOT RECONCILIATION */}
+      {canViewAll && activeTab === 'attendance_audit' && (
+        <AttendanceAuditView user={user} />
       )}
 
       {selectedRequestForModal && (

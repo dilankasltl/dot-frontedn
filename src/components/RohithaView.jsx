@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { CheckCircle2, XCircle, Eye, RefreshCw, BarChart3, Users, Clock, Trash2, Calendar, FileSpreadsheet, Bell } from 'lucide-react';
 import RequestDetailModal from './RequestDetailModal';
 import AnalyticsCharts from './AnalyticsCharts';
+import AttendanceAuditView from './AttendanceAuditView';
 import { api } from '../api';
 import { playNotificationSound } from '../utils/sound';
 
@@ -198,18 +199,15 @@ export default function RohithaView({ user, isViewerOnly = false }) {
         </button>
 
         <button
-          onClick={() => setActiveTab('company_monitor')}
+          onClick={() => setActiveTab('attendance_audit')}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'company_monitor'
-              ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-xs'
+            activeTab === 'attendance_audit'
+              ? 'bg-white dark:bg-slate-700 text-teal-700 dark:text-teal-300 shadow-xs'
               : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
           }`}
         >
-          <Clock className="w-3.5 h-3.5" />
-          <span>Live Pending (Plant-Wide)</span>
-          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300">
-            {allPending.length}
-          </span>
+          <FileSpreadsheet className="w-3.5 h-3.5 text-teal-500" />
+          <span>Attendance Audit (DOT Reconciliation)</span>
         </button>
 
         <button
@@ -526,6 +524,11 @@ export default function RohithaView({ user, isViewerOnly = false }) {
           title="Plant Operations — Double OT Bar Chart & Analytics"
           defaultSubTab="charts"
         />
+      )}
+
+      {/* TAB 4: ATTENDANCE AUDIT & DOT RECONCILIATION */}
+      {activeTab === 'attendance_audit' && (
+        <AttendanceAuditView user={user} />
       )}
 
       {selectedRequestForModal && (
