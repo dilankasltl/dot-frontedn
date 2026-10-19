@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Send, PlusCircle, Calendar, Clock, CheckCircle, AlertCircle, Eye, RefreshCw, FileText, Trash2, Edit3, Filter, FileSpreadsheet } from 'lucide-react';
+import { Send, PlusCircle, Calendar, Clock, CheckCircle, AlertCircle, Eye, RefreshCw, FileText, Trash2, Edit3, Filter, FileSpreadsheet, BarChart3 } from 'lucide-react';
 import EmployeeSelector from './EmployeeSelector';
 import RequestDetailModal from './RequestDetailModal';
 import AnalyticsCharts from './AnalyticsCharts';
+import AttendanceAuditView from './AttendanceAuditView';
 import { api } from '../api';
 
 export default function RequesterView({ user }) {
@@ -209,6 +210,34 @@ export default function RequesterView({ user }) {
           <FileSpreadsheet className="w-4 h-4 text-indigo-500" />
           EPF Number-Wise Summary
         </button>
+
+        {user.canViewCharts && (
+          <button
+            onClick={() => setActiveTab('charts')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'charts'
+                ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-xs'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4 text-blue-500" />
+            Department Charts
+          </button>
+        )}
+
+        {(user.canViewAttendance || user.canManageAttendance) && (
+          <button
+            onClick={() => setActiveTab('attendance_audit')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'attendance_audit'
+                ? 'bg-white dark:bg-slate-700 text-teal-700 dark:text-teal-300 shadow-xs'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+            }`}
+          >
+            <FileSpreadsheet className="w-4 h-4 text-teal-500" />
+            Attendance Audit
+          </button>
+        )}
       </div>
 
       {message && (
@@ -528,6 +557,20 @@ export default function RequesterView({ user }) {
           title={`${user.department} Department - EPF Number-Wise Summary`}
           defaultSubTab="epf"
         />
+      )}
+
+      {/* DEPARTMENT CHARTS TAB */}
+      {user.canViewCharts && activeTab === 'charts' && (
+        <AnalyticsCharts
+          allowedDepartments={[user.department]}
+          title={`${user.department} Department - Double OT Bar Charts & Analytics`}
+          defaultSubTab="charts"
+        />
+      )}
+
+      {/* ATTENDANCE AUDIT TAB */}
+      {(user.canViewAttendance || user.canManageAttendance) && activeTab === 'attendance_audit' && (
+        <AttendanceAuditView user={user} />
       )}
 
       {selectedRequestForModal && (

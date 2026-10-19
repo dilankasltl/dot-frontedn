@@ -35,15 +35,66 @@ export default function App() {
     setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
   };
 
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('dot_user');
+  };
+
+  // Live user profile & permissions sync with server
+  useEffect(() => {
+    if (!currentUser?.username) return;
+
+    let isMounted = true;
+    const syncUser = async () => {
+      try {
+        const res = await api.getMe(currentUser.username);
+        if (isMounted && res.user) {
+          const updated = res.user;
+          const hasChanged =
+            updated.role !== currentUser.role ||
+            updated.name !== currentUser.name ||
+            updated.department !== currentUser.department ||
+            updated.canViewAllPending !== currentUser.canViewAllPending ||
+            updated.canViewCharts !== currentUser.canViewCharts ||
+            updated.canManageAttendance !== currentUser.canManageAttendance ||
+            updated.canViewAttendance !== currentUser.canViewAttendance ||
+            updated.isActive !== currentUser.isActive;
+
+          if (hasChanged) {
+            console.log('User profile & permissions updated live from server:', updated);
+            setCurrentUser(updated);
+            localStorage.setItem('dot_user', JSON.stringify(updated));
+          }
+        }
+      } catch (err) {
+        if (isMounted && (err.status === 403 || err.isActive === false)) {
+          alert('Access Revoked: Your account access has been revoked or deactivated by the Administrator.');
+          handleLogout();
+        }
+      }
+    };
+
+    // Immediate sync on load
+    syncUser();
+
+    // Sync on window focus
+    const handleFocus = () => syncUser();
+    window.addEventListener('focus', handleFocus);
+
+    // Periodic live sync every 12 seconds
+    const interval = setInterval(syncUser, 12000);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('focus', handleFocus);
+      clearInterval(interval);
+    };
+  }, [currentUser?.username]);
+
   const handleLogin = async (username, password) => {
     const res = await api.login(username, password);
     setCurrentUser(res.user);
     localStorage.setItem('dot_user', JSON.stringify(res.user));
-  };
-
-  const handleLogout = () => {
-    setCurrentUser(null);
-    localStorage.removeItem('dot_user');
   };
 
   if (!currentUser) {
@@ -52,7 +103,7 @@ export default function App() {
 
   const renderDashboard = () => {
     if (currentUser.role === 'admin') {
-      return <AdminView user={currentUser} />;
+      return <AdminView user={currentUser} onUserUpdated={setCurrentUser} />;
     }
 
     if (currentUser.role === 'approver_final') {

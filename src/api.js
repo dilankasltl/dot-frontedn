@@ -15,6 +15,18 @@ export const api = {
     return res.json();
   },
 
+  getMe: async (username) => {
+    const res = await fetch(`${API_BASE}/auth/me?username=${encodeURIComponent(username)}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      const error = new Error(err.error || 'Failed to sync user session');
+      error.status = res.status;
+      error.isActive = err.isActive;
+      throw error;
+    }
+    return res.json();
+  },
+
   resetPassword: async (username, newPassword) => {
     const res = await fetch(`${API_BASE}/auth/reset-password`, {
       method: 'POST',

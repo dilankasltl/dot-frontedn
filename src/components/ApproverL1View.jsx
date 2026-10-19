@@ -19,7 +19,9 @@ export default function ApproverL1View({ user }) {
   const [message, setMessage] = useState(null);
   const [monitorDateMode, setMonitorDateMode] = useState('all_pending'); // 'all_pending' | 'today'
 
-  const canViewAll = user.canViewAllPending || user.username === 'Dhammika';
+  const canViewAll = user.canViewAllPending || user.username === 'Dhammika' || user.username === 'Rohitha';
+  const canViewAttendance = user.canViewAttendance || user.canManageAttendance || canViewAll || user.username === 'Dhammika';
+  const canViewCharts = user.canViewCharts !== false;
   const prevActionableCountRef = useRef(null);
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -265,7 +267,7 @@ export default function ApproverL1View({ user }) {
             <span>Department Charts</span>
           </button>
 
-          {canViewAll && (
+          {canViewAttendance && (
             <button
               onClick={() => setActiveTab('attendance_audit')}
               className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
@@ -651,7 +653,7 @@ export default function ApproverL1View({ user }) {
       )}
 
       {/* TAB 5: ATTENDANCE AUDIT & DOT RECONCILIATION */}
-      {canViewAll && activeTab === 'attendance_audit' && (
+      {canViewAttendance && activeTab === 'attendance_audit' && (
         <AttendanceAuditView user={user} />
       )}
 

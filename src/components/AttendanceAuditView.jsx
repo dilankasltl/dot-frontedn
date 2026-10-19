@@ -51,8 +51,8 @@ export default function AttendanceAuditView({ user }) {
   const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL' | 'APPROVED' | 'NOT_APPROVED' | 'PENDING' | 'OFF_SHIFT' | 'HIGH_HOURS'
   const [presentOnly, setPresentOnly] = useState(true); // default: show people who attended/worked
 
-  // Check upload & edit permissions (Mr. Nimesh & Admin)
-  const canManage = user.username === 'Nimesh' || user.name?.toLowerCase().includes('nimesh') || user.username === 'Admin' || user.role === 'admin';
+  // Check upload & edit permissions (canManageAttendance, Mr. Nimesh, or Admin)
+  const canManage = !!user.canManageAttendance || user.username === 'Nimesh' || user.name?.toLowerCase().includes('nimesh') || user.username === 'Admin' || user.role === 'admin';
   const canUpload = canManage;
 
   // Edit single record modal state

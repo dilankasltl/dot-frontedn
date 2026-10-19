@@ -33,7 +33,7 @@ import AnalyticsCharts from './AnalyticsCharts';
 import AttendanceAuditView from './AttendanceAuditView';
 import { api } from '../api';
 
-export default function AdminView({ user }) {
+export default function AdminView({ user, onUserUpdated }) {
   const [activeTab, setActiveTab] = useState('users'); // 'users' | 'employees' | 'data' | 'charts'
   const [usersList, setUsersList] = useState([]);
   const [hodsList, setHodsList] = useState([]);
@@ -327,7 +327,7 @@ export default function AdminView({ user }) {
     setLoading(true);
     setMessage(null);
     try {
-      await api.updateAdminUser(editingUser._id, {
+      const res = await api.updateAdminUser(editingUser._id, {
         name: editName,
         password: editPassword || undefined,
         role: editRole,
@@ -340,6 +340,10 @@ export default function AdminView({ user }) {
         canManageAttendance: editCanManageAttendance,
         canViewAttendance: editCanViewAttendance
       });
+
+      if (res?.user && user?.username === editingUser.username && onUserUpdated) {
+        onUserUpdated(res.user);
+      }
 
       setMessage({ type: 'success', text: `User ${editName} access and permissions updated successfully.` });
       setEditingUser(null);
@@ -368,6 +372,9 @@ export default function AdminView({ user }) {
     setMessage(null);
     try {
       const res = await api.toggleUserAccess(u._id);
+      if (res?.user && user?.username === u.username && onUserUpdated) {
+        onUserUpdated(res.user);
+      }
       setMessage({ type: 'success', text: res.message || 'Access status updated successfully.' });
       await fetchUsers();
     } catch (err) {
