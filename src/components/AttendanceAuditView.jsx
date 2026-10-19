@@ -44,7 +44,7 @@ export default function AttendanceAuditView({ user }) {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState(null);
-  const [graphTab, setGraphTab] = useState('all'); // 'all' | 'status' | 'shifts' | 'hours'
+  const [graphTab, setGraphTab] = useState('all'); // 'all' | 'status' | 'criteria'
   
   // Table filters & search
   const [searchFilter, setSearchFilter] = useState('');
@@ -382,38 +382,28 @@ export default function AttendanceAuditView({ user }) {
   const pendingCount = records.filter(r => r.vinodStatus === 'PENDING').length;
   const offShiftCount = records.filter(r => String(r.shiftName).toLowerCase().includes('off') && String(r.present).toLowerCase() === 'yes').length;
   const highHoursCount = records.filter(r => Number(r.workHrs || 0) >= 19).length;
+  const bothCount = records.filter(r => String(r.shiftName).toLowerCase().includes('off') && String(r.present).toLowerCase() === 'yes' && Number(r.workHrs || 0) >= 19).length;
 
   // Analytics chart datasets for this date
   const approvalChartData = [
     { name: 'Vinod Approved', count: approvedCount, fill: '#10b981' },
-    { name: 'Pending Approval', count: pendingCount, fill: '#f59e0b' },
+    ...(pendingCount > 0 ? [{ name: 'Pending Approval', count: pendingCount, fill: '#f59e0b' }] : []),
     { name: 'Not Approved', count: notApprovedCount, fill: '#f43f5e' }
   ];
 
-  const shiftCounts = {};
-  records.forEach(r => {
-    const s = (r.shiftName || 'Other').trim();
-    shiftCounts[s] = (shiftCounts[s] || 0) + 1;
-  });
-  const shiftChartData = Object.entries(shiftCounts).map(([shift, count]) => ({
-    name: shift,
-    count,
-    fill: shift.toLowerCase() === 'off' ? '#a855f7' : shift.toLowerCase().includes('night') ? '#3b82f6' : '#06b6d4'
-  })).sort((a, b) => b.count - a.count);
-
-  const hoursRanges = [
-    { name: '< 12h (Off Day)', count: 0, fill: '#8b5cf6' },
-    { name: '12h - 18.9h', count: 0, fill: '#3b82f6' },
-    { name: '19h - 22.9h (Double OT)', count: 0, fill: '#f59e0b' },
-    { name: '≥ 23h (24h Full Day)', count: 0, fill: '#ef4444' }
+  // Double OT Qualification Criteria: Shift = Off (Worked on Off Day) vs Work Hrs >= 19h
+  const dotCriteriaChartData = [
+    {
+      name: 'Shift = Off (Worked on Off Day)',
+      count: offShiftCount,
+      fill: '#a855f7'
+    },
+    {
+      name: 'Work Hrs >= 19h',
+      count: highHoursCount,
+      fill: '#3b82f6'
+    }
   ];
-  records.forEach(r => {
-    const h = Number(r.workHrs || 0);
-    if (h < 12) hoursRanges[0].count++;
-    else if (h < 19) hoursRanges[1].count++;
-    else if (h < 23) hoursRanges[2].count++;
-    else hoursRanges[3].count++;
-  });
 
   return (
     <div className="space-y-6">
@@ -874,7 +864,7 @@ export default function AttendanceAuditView({ user }) {
                   </span>
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Graphical analysis for {records.length} Double OT incidents (Shift Off vs ≥ 19h vs Vinod Approvals)
+                  Graphical analysis for {records.length} Double OT incidents (Shift = Off vs Work Hrs ≥ 19h vs Mr. Vinod Approvals)
                 </p>
               </div>
             </div>
@@ -902,24 +892,14 @@ export default function AttendanceAuditView({ user }) {
                 Vinod Approval
               </button>
               <button
-                onClick={() => setGraphTab('shifts')}
+                onClick={() => setGraphTab('criteria')}
                 className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                  graphTab === 'shifts'
+                  graphTab === 'criteria'
                     ? 'bg-white dark:bg-slate-700 text-purple-700 dark:text-purple-300 shadow-xs'
                     : 'text-slate-600 dark:text-slate-400'
                 }`}
               >
-                Shift Types
-              </button>
-              <button
-                onClick={() => setGraphTab('hours')}
-                className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                  graphTab === 'hours'
-                    ? 'bg-white dark:bg-slate-700 text-amber-700 dark:text-amber-300 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400'
-                }`}
-              >
-                Work Hours
+                DOT Criteria (Shift Off / ≥19h)
               </button>
             </div>
           </div>
@@ -927,7 +907,7 @@ export default function AttendanceAuditView({ user }) {
           {/* Quick Metrics Bar */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800">
-              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">Total DOT People</span>
+              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">Total DOT Incidents</span>
               <span className="text-xl font-black text-slate-900 dark:text-white mt-0.5 block">{records.length}</span>
             </div>
             <div className="p-3.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60">
@@ -936,25 +916,25 @@ export default function AttendanceAuditView({ user }) {
                 {approvedCount} <span className="text-xs font-semibold">({records.length > 0 ? Math.round((approvedCount / records.length) * 100) : 0}%)</span>
               </span>
             </div>
-            <div className="p-3.5 rounded-xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/60">
-              <span className="text-[11px] font-semibold text-rose-700 dark:text-rose-400 block">Unauthorized / Not Approved</span>
-              <span className="text-xl font-black text-rose-700 dark:text-rose-300 mt-0.5 block">
-                {notApprovedCount} <span className="text-xs font-semibold">({records.length > 0 ? Math.round((notApprovedCount / records.length) * 100) : 0}%)</span>
-              </span>
-            </div>
             <div className="p-3.5 rounded-xl bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/60">
-              <span className="text-[11px] font-semibold text-purple-700 dark:text-purple-400 block">Off Day Shifts Worked</span>
+              <span className="text-[11px] font-semibold text-purple-700 dark:text-purple-400 block">Shift = Off (Worked on Off Day)</span>
               <span className="text-xl font-black text-purple-700 dark:text-purple-300 mt-0.5 block">
                 {offShiftCount} <span className="text-xs font-semibold">({records.length > 0 ? Math.round((offShiftCount / records.length) * 100) : 0}%)</span>
               </span>
             </div>
+            <div className="p-3.5 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/60">
+              <span className="text-[11px] font-semibold text-blue-700 dark:text-blue-400 block">Work Hrs ≥ 19h</span>
+              <span className="text-xl font-black text-blue-700 dark:text-blue-300 mt-0.5 block">
+                {highHoursCount} <span className="text-xs font-semibold">({records.length > 0 ? Math.round((highHoursCount / records.length) * 100) : 0}%)</span>
+              </span>
+            </div>
           </div>
 
-          {/* Charts Area */}
+          {/* Charts Area: 2 Focused Double OT Analytics Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Chart 1: Approval Status */}
             {(graphTab === 'all' || graphTab === 'status') && (
-              <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 space-y-3">
+              <div className={`p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 space-y-3 ${graphTab === 'status' ? 'lg:col-span-2' : ''}`}>
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
@@ -976,10 +956,11 @@ export default function AttendanceAuditView({ user }) {
                           color: '#fff',
                           fontSize: '12px'
                         }}
+                        formatter={(val) => [`${val} Employees`, 'Headcount']}
                       />
                       <Bar dataKey="count" radius={[8, 8, 0, 0]}>
                         {approvalChartData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.fill} />
+                          <Cell key={`approval-cell-${index}`} fill={entry.fill} />
                         ))}
                       </Bar>
                     </BarChart>
@@ -988,19 +969,19 @@ export default function AttendanceAuditView({ user }) {
               </div>
             )}
 
-            {/* Chart 2: Shift Types Breakdown */}
-            {(graphTab === 'all' || graphTab === 'shifts') && (
-              <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 space-y-3">
+            {/* Chart 2: Double OT Criteria Breakdown (Shift = Off vs Work Hrs >= 19h) */}
+            {(graphTab === 'all' || graphTab === 'criteria') && (
+              <div className={`p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 space-y-3 ${graphTab === 'criteria' ? 'lg:col-span-2' : ''}`}>
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-purple-500"></span>
-                    Shift-Wise Double OT Distribution
+                    Double OT Criteria: Shift = Off vs Work Hrs ≥ 19h
                   </h4>
-                  <span className="text-[10px] text-slate-400">Headcount by Shift</span>
+                  <span className="text-[10px] text-slate-400">Headcount by DOT Rule</span>
                 </div>
                 <div className="h-64 w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={shiftChartData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
+                    <BarChart data={dotCriteriaChartData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
                       <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                       <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                       <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
@@ -1012,51 +993,21 @@ export default function AttendanceAuditView({ user }) {
                           color: '#fff',
                           fontSize: '12px'
                         }}
+                        formatter={(val) => [`${val} Employees`, 'Qualified for Double OT']}
                       />
                       <Bar dataKey="count" radius={[8, 8, 0, 0]}>
-                        {shiftChartData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.fill} />
+                        {dotCriteriaChartData.map((entry, index) => (
+                          <Cell key={`criteria-cell-${index}`} fill={entry.fill} />
                         ))}
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
-              </div>
-            )}
-
-            {/* Chart 3: Work Hours Range */}
-            {(graphTab === 'all' || graphTab === 'hours') && (
-              <div className={`p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 space-y-3 ${graphTab === 'all' ? 'lg:col-span-2' : ''}`}>
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-                    Work Hours Range Breakdown (Continuous Shift Duration)
-                  </h4>
-                  <span className="text-[10px] text-slate-400">Headcount by Hours</span>
-                </div>
-                <div className="h-64 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={hoursRanges} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
-                      <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                      <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                      <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#1e293b',
-                          borderColor: '#334155',
-                          borderRadius: '10px',
-                          color: '#fff',
-                          fontSize: '12px'
-                        }}
-                      />
-                      <Bar dataKey="count" radius={[8, 8, 0, 0]}>
-                        {hoursRanges.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.fill} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                {bothCount > 0 && (
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 text-center italic">
+                    * Note: {bothCount} employees satisfied both conditions (Shift = Off and Work Hrs ≥ 19h).
+                  </p>
+                )}
               </div>
             )}
           </div>
