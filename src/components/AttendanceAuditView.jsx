@@ -155,16 +155,21 @@ export default function AttendanceAuditView({ user }) {
 
           if (firstDate && !fallbackDate) fallbackDate = firstDate;
 
+          const isPresentYes = String(present || '').trim().toLowerCase() === 'yes';
           const isOffShift = shiftName.toLowerCase() === 'off';
           const isHighHours = workHrs >= 19;
 
+          // Condition 1: Shift Name = 'off' AND Present = 'Yes' (Off day එකේ වැඩ කළ අය)
+          // Condition 2: Work Hrs >= 19 (පැය 19 හෝ ඊට වැඩි කාලයක් වැඩ කළ අය)
+          const isOffDayWorked = isOffShift && isPresentYes;
+
           // Double OT qualification
-          if (isOffShift || isHighHours) {
+          if (isOffDayWorked || isHighHours) {
             let dotReason = '';
-            if (isOffShift && isHighHours) {
-              dotReason = 'Shift = Off & Work Hrs >= 19h';
-            } else if (isOffShift) {
-              dotReason = 'Shift = Off (Double OT)';
+            if (isOffDayWorked && isHighHours) {
+              dotReason = 'Off Day & Work Hrs >= 19h';
+            } else if (isOffDayWorked) {
+              dotReason = 'Shift = Off (Worked on Off Day)';
             } else {
               dotReason = `Work Hrs >= 19h (${workHrs}h)`;
             }
@@ -239,7 +244,7 @@ export default function AttendanceAuditView({ user }) {
     if (statusFilter === 'APPROVED' && r.vinodStatus !== 'APPROVED') return false;
     if (statusFilter === 'NOT_APPROVED' && r.vinodStatus !== 'NOT_APPROVED') return false;
     if (statusFilter === 'PENDING' && r.vinodStatus !== 'PENDING') return false;
-    if (statusFilter === 'OFF_SHIFT' && !String(r.shiftName).toLowerCase().includes('off')) return false;
+    if (statusFilter === 'OFF_SHIFT' && !(String(r.shiftName).toLowerCase().includes('off') && String(r.present).toLowerCase() === 'yes')) return false;
     if (statusFilter === 'HIGH_HOURS' && Number(r.workHrs || 0) < 19) return false;
 
     // 3. Search query
@@ -260,7 +265,7 @@ export default function AttendanceAuditView({ user }) {
   const approvedCount = records.filter(r => r.vinodStatus === 'APPROVED').length;
   const notApprovedCount = records.filter(r => r.vinodStatus === 'NOT_APPROVED').length;
   const pendingCount = records.filter(r => r.vinodStatus === 'PENDING').length;
-  const offShiftCount = records.filter(r => String(r.shiftName).toLowerCase().includes('off')).length;
+  const offShiftCount = records.filter(r => String(r.shiftName).toLowerCase().includes('off') && String(r.present).toLowerCase() === 'yes').length;
   const highHoursCount = records.filter(r => Number(r.workHrs || 0) >= 19).length;
 
   return (
@@ -488,7 +493,7 @@ export default function AttendanceAuditView({ user }) {
               Double OT Reconciliation Table ({filteredRecords.length} records)
             </h3>
             <span className="text-[11px] text-slate-400">
-              Conditions: Shift Name = 'Off' OR Work Hrs ≥ 19
+              Conditions: (Shift Name = 'Off' and Present = 'Yes') OR (Work Hrs ≥ 19)
             </span>
           </div>
 
