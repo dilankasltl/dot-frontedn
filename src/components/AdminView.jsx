@@ -20,7 +20,14 @@ import {
   X,
   FileSpreadsheet,
   BadgePlus,
-  Contact2
+  Contact2,
+  ShieldCheck,
+  ShieldAlert,
+  UserCheck,
+  UserX,
+  Lock,
+  Unlock,
+  Eye
 } from 'lucide-react';
 import AnalyticsCharts from './AnalyticsCharts';
 import AttendanceAuditView from './AttendanceAuditView';
@@ -51,13 +58,18 @@ export default function AdminView({ user }) {
 
   // New User Form State
   const [showAddUserModal, setShowAddUserModal] = useState(false);
-  const [newRole, setNewRole] = useState('requester'); // 'requester' | 'approver_l1'
+  const [newRole, setNewRole] = useState('requester'); // 'requester' | 'approver_l1' | 'viewer' | 'approver_final' | 'admin'
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newName, setNewName] = useState('');
   const [newDepartment, setNewDepartment] = useState('');
   const [assignedL1, setAssignedL1] = useState('');
   const [approvedDeptsInput, setApprovedDeptsInput] = useState('');
+  const [newIsActive, setNewIsActive] = useState(true);
+  const [newCanViewAllPending, setNewCanViewAllPending] = useState(false);
+  const [newCanViewCharts, setNewCanViewCharts] = useState(false);
+  const [newCanManageAttendance, setNewCanManageAttendance] = useState(false);
+  const [newCanViewAttendance, setNewCanViewAttendance] = useState(false);
   // Inline HOD creation
   const [createHODInline, setCreateHODInline] = useState(false);
   const [newHODUsername, setNewHODUsername] = useState('');
@@ -68,9 +80,15 @@ export default function AdminView({ user }) {
   const [editingUser, setEditingUser] = useState(null);
   const [editName, setEditName] = useState('');
   const [editPassword, setEditPassword] = useState('');
+  const [editRole, setEditRole] = useState('requester');
   const [editDepartment, setEditDepartment] = useState('');
   const [editAssignedL1, setEditAssignedL1] = useState('');
   const [editApprovedDepts, setEditApprovedDepts] = useState('');
+  const [editIsActive, setEditIsActive] = useState(true);
+  const [editCanViewAllPending, setEditCanViewAllPending] = useState(false);
+  const [editCanViewCharts, setEditCanViewCharts] = useState(false);
+  const [editCanManageAttendance, setEditCanManageAttendance] = useState(false);
+  const [editCanViewAttendance, setEditCanViewAttendance] = useState(false);
 
   // Data Management Filters
   const [dataDeptFilter, setDataDeptFilter] = useState('ALL');
@@ -246,6 +264,11 @@ export default function AdminView({ user }) {
         department: newDepartment.trim(),
         assignedL1Approver: assignedL1,
         approvedDepartments: approvedDeptsInput ? approvedDeptsInput.split(',').map(d => d.trim()) : [],
+        isActive: newIsActive,
+        canViewAllPending: newCanViewAllPending,
+        canViewCharts: newCanViewCharts,
+        canManageAttendance: newCanManageAttendance,
+        canViewAttendance: newCanViewAttendance,
         createHODInline,
         hodUsername: newHODUsername.trim(),
         hodPassword: newHODPassword.trim(),
@@ -264,6 +287,11 @@ export default function AdminView({ user }) {
       setNewName('');
       setNewDepartment('');
       setApprovedDeptsInput('');
+      setNewIsActive(true);
+      setNewCanViewAllPending(false);
+      setNewCanViewCharts(false);
+      setNewCanManageAttendance(false);
+      setNewCanViewAttendance(false);
       setCreateHODInline(false);
       setNewHODUsername('');
       setNewHODPassword('');
@@ -282,9 +310,15 @@ export default function AdminView({ user }) {
     setEditingUser(u);
     setEditName(u.name);
     setEditPassword('');
+    setEditRole(u.role || 'requester');
     setEditDepartment(u.department || '');
     setEditAssignedL1(u.assignedL1Approver || '');
     setEditApprovedDepts(u.approvedDepartments ? u.approvedDepartments.join(', ') : '');
+    setEditIsActive(u.isActive !== false);
+    setEditCanViewAllPending(!!u.canViewAllPending);
+    setEditCanViewCharts(!!u.canViewCharts);
+    setEditCanManageAttendance(!!u.canManageAttendance);
+    setEditCanViewAttendance(!!u.canViewAttendance);
   };
 
   const handleSaveEdit = async (e) => {
@@ -296,16 +330,48 @@ export default function AdminView({ user }) {
       await api.updateAdminUser(editingUser._id, {
         name: editName,
         password: editPassword || undefined,
+        role: editRole,
         department: editDepartment,
         assignedL1Approver: editAssignedL1,
-        approvedDepartments: editApprovedDepts ? editApprovedDepts.split(',').map(d => d.trim()) : []
+        approvedDepartments: editApprovedDepts ? editApprovedDepts.split(',').map(d => d.trim()) : [],
+        isActive: editIsActive,
+        canViewAllPending: editCanViewAllPending,
+        canViewCharts: editCanViewCharts,
+        canManageAttendance: editCanManageAttendance,
+        canViewAttendance: editCanViewAttendance
       });
 
-      setMessage({ type: 'success', text: `User ${editName} updated successfully.` });
+      setMessage({ type: 'success', text: `User ${editName} access and permissions updated successfully.` });
       setEditingUser(null);
       await fetchUsers();
     } catch (err) {
       setMessage({ type: 'error', text: err.message || 'Failed to update user.' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle Toggle Access (Grant or Revoke)
+  const handleToggleAccess = async (u) => {
+    if (u.username === 'Admin') {
+      alert('The Administrator account cannot have its access revoked.');
+      return;
+    }
+
+    const isCurrentlyActive = u.isActive !== false;
+    const actionLabel = isCurrentlyActive ? 'Revoke Access from' : 'Grant Access to';
+    if (!confirm(`Are you sure you want to ${actionLabel} "${u.name}" (${u.username})?`)) {
+      return;
+    }
+
+    setLoading(true);
+    setMessage(null);
+    try {
+      const res = await api.toggleUserAccess(u._id);
+      setMessage({ type: 'success', text: res.message || 'Access status updated successfully.' });
+      await fetchUsers();
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message || 'Failed to update user access.' });
     } finally {
       setLoading(false);
     }
@@ -604,8 +670,9 @@ export default function AdminView({ user }) {
                 <option value="ALL">All Roles</option>
                 <option value="requester">Requesters</option>
                 <option value="approver_l1">Level 1 HODs</option>
+                <option value="viewer">Viewers & Auditors</option>
                 <option value="approver_final">Final Approver</option>
-                <option value="admin">Admin</option>
+                <option value="admin">System Admin</option>
               </select>
             </div>
           </div>
@@ -618,23 +685,37 @@ export default function AdminView({ user }) {
                   <th className="py-3 px-4">Full Name</th>
                   <th className="py-3 px-4">Username</th>
                   <th className="py-3 px-4">Role</th>
+                  <th className="py-3 px-4">Access Status</th>
+                  <th className="py-3 px-4">Permissions</th>
                   <th className="py-3 px-4">Department / Scope</th>
-                  <th className="py-3 px-4">Assigned HOD Approver</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
+                  <th className="py-3 px-4">Assigned HOD</th>
+                  <th className="py-3 px-4 text-right">Access Controls & Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
                 {filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="py-8 text-center text-slate-400">
+                    <td colSpan="8" className="py-8 text-center text-slate-400">
                       No users found.
                     </td>
                   </tr>
                 ) : (
                   filteredUsers.map((u) => (
-                    <tr key={u._id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
+                    <tr
+                      key={u._id}
+                      className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors ${
+                        u.isActive === false ? 'opacity-70 bg-rose-50/20 dark:bg-rose-950/10' : ''
+                      }`}
+                    >
                       <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">
-                        {u.name}
+                        <div className="flex items-center gap-1.5">
+                          {u.isActive === false ? (
+                            <UserX className="w-4 h-4 text-rose-500 shrink-0" />
+                          ) : (
+                            <UserCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+                          )}
+                          <span>{u.name}</span>
+                        </div>
                       </td>
                       <td className="py-3 px-4 font-mono font-semibold text-indigo-600 dark:text-indigo-400">
                         {u.username}
@@ -650,6 +731,11 @@ export default function AdminView({ user }) {
                             Level 1 (HOD)
                           </span>
                         )}
+                        {u.role === 'viewer' && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300">
+                            Viewer / Auditor
+                          </span>
+                        )}
                         {u.role === 'approver_final' && (
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300">
                             Final Approver
@@ -661,6 +747,44 @@ export default function AdminView({ user }) {
                           </span>
                         )}
                       </td>
+                      <td className="py-3 px-4">
+                        {u.isActive !== false ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Active
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300">
+                            <X className="w-3 h-3 text-rose-600" /> Access Revoked
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex flex-wrap gap-1">
+                          {u.canViewAllPending && (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/50" title="Can view all company requests">
+                              All Requests
+                            </span>
+                          )}
+                          {u.canViewCharts && (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/50" title="Can view analytics charts">
+                              Charts
+                            </span>
+                          )}
+                          {u.canManageAttendance && (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/50" title="Can upload & edit biometric Double OT data">
+                              DOT Upload
+                            </span>
+                          )}
+                          {u.canViewAttendance && !u.canManageAttendance && (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800/50" title="Can view attendance reconciliation portal">
+                              DOT View
+                            </span>
+                          )}
+                          {!u.canViewAllPending && !u.canViewCharts && !u.canManageAttendance && !u.canViewAttendance && (
+                            <span className="text-slate-400 text-[10px]">Standard</span>
+                          )}
+                        </div>
+                      </td>
                       <td className="py-3 px-4 text-slate-700 dark:text-slate-300">
                         {u.role === 'requester' && (u.department || '-')}
                         {u.role === 'approver_l1' && (
@@ -670,6 +794,7 @@ export default function AdminView({ user }) {
                               : 'General'}
                           </span>
                         )}
+                        {u.role === 'viewer' && 'Plant-wide Monitor (All Departments)'}
                         {u.role === 'approver_final' && 'Company-wide (All Departments)'}
                         {u.role === 'admin' && 'System Governance'}
                       </td>
@@ -683,11 +808,33 @@ export default function AdminView({ user }) {
                         )}
                       </td>
                       <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {/* Quick Toggle Access Button */}
+                          {u.username !== 'Admin' && (
+                            u.isActive !== false ? (
+                              <button
+                                onClick={() => handleToggleAccess(u)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-900 transition-colors cursor-pointer"
+                                title="Revoke this user's access (disable login)"
+                              >
+                                <Lock className="w-3 h-3" />
+                                <span>Revoke Access</span>
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleToggleAccess(u)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-900 transition-colors cursor-pointer"
+                                title="Grant system access to this user (enable login)"
+                              >
+                                <Unlock className="w-3 h-3" />
+                                <span>Grant Access</span>
+                              </button>
+                            )
+                          )}
                           <button
                             onClick={() => handleStartEdit(u)}
                             className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-800 cursor-pointer"
-                            title="Edit User"
+                            title="Edit User & Permissions"
                           >
                             <Edit3 className="w-3.5 h-3.5" />
                           </button>
@@ -1126,14 +1273,18 @@ export default function AdminView({ user }) {
                 <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Account Type / Role
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   <button
                     type="button"
                     onClick={() => {
                       setNewRole('requester');
                       setCreateHODInline(false);
+                      setNewCanViewAllPending(false);
+                      setNewCanViewCharts(false);
+                      setNewCanManageAttendance(false);
+                      setNewCanViewAttendance(false);
                     }}
-                    className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                    className={`py-2 px-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
                       newRole === 'requester'
                         ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300'
                         : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400'
@@ -1146,14 +1297,72 @@ export default function AdminView({ user }) {
                     onClick={() => {
                       setNewRole('approver_l1');
                       setCreateHODInline(false);
+                      setNewCanViewAllPending(false);
+                      setNewCanViewCharts(true);
+                      setNewCanManageAttendance(false);
+                      setNewCanViewAttendance(false);
                     }}
-                    className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                    className={`py-2 px-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
                       newRole === 'approver_l1'
                         ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300'
                         : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400'
                     }`}
                   >
                     Level 1 Approver (HOD)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewRole('viewer');
+                      setCreateHODInline(false);
+                      setNewCanViewAllPending(true);
+                      setNewCanViewCharts(true);
+                      setNewCanManageAttendance(false);
+                      setNewCanViewAttendance(true);
+                    }}
+                    className={`py-2 px-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                      newRole === 'viewer'
+                        ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-300'
+                        : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    Plant Monitor (Viewer)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewRole('approver_final');
+                      setCreateHODInline(false);
+                      setNewCanViewAllPending(true);
+                      setNewCanViewCharts(true);
+                      setNewCanManageAttendance(false);
+                      setNewCanViewAttendance(true);
+                    }}
+                    className={`py-2 px-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                      newRole === 'approver_final'
+                        ? 'border-purple-500 bg-purple-50 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300'
+                        : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    Final Authority (Vinod)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewRole('admin');
+                      setCreateHODInline(false);
+                      setNewCanViewAllPending(true);
+                      setNewCanViewCharts(true);
+                      setNewCanManageAttendance(true);
+                      setNewCanViewAttendance(true);
+                    }}
+                    className={`py-2 px-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                      newRole === 'admin'
+                        ? 'border-rose-500 bg-rose-50 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300'
+                        : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    System Admin
                   </button>
                 </div>
               </div>
@@ -1201,6 +1410,89 @@ export default function AdminView({ user }) {
                   onChange={(e) => setNewName(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                 />
+              </div>
+
+              {/* Access Control & Permissions Box */}
+              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    Account Access & Status
+                  </span>
+                  <label className="flex items-center gap-2 cursor-pointer font-bold text-xs text-slate-800 dark:text-slate-200">
+                    <input
+                      type="checkbox"
+                      checked={newIsActive}
+                      onChange={(e) => setNewIsActive(e.target.checked)}
+                      className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
+                    />
+                    <span className={newIsActive ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-600'}>
+                      {newIsActive ? 'Access Granted (Active)' : 'Access Revoked (Disabled)'}
+                    </span>
+                  </label>
+                </div>
+
+                <div className="pt-2 border-t border-slate-200 dark:border-slate-700 space-y-2">
+                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block uppercase tracking-wider">
+                    Feature Permissions:
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    <label className="flex items-center gap-2 p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={newCanViewAllPending}
+                        onChange={(e) => setNewCanViewAllPending(e.target.checked)}
+                        className="rounded text-blue-600 w-4 h-4"
+                      />
+                      <div>
+                        <span className="font-semibold block text-slate-800 dark:text-slate-200">View All Requests</span>
+                        <span className="text-[10px] text-slate-400 block">Monitor all company departments</span>
+                      </div>
+                    </label>
+
+                    <label className="flex items-center gap-2 p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={newCanViewCharts}
+                        onChange={(e) => setNewCanViewCharts(e.target.checked)}
+                        className="rounded text-purple-600 w-4 h-4"
+                      />
+                      <div>
+                        <span className="font-semibold block text-slate-800 dark:text-slate-200">View Analytics Charts</span>
+                        <span className="text-[10px] text-slate-400 block">Double OT bar charts & metrics</span>
+                      </div>
+                    </label>
+
+                    <label className="flex items-center gap-2 p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={newCanViewAttendance}
+                        onChange={(e) => setNewCanViewAttendance(e.target.checked)}
+                        className="rounded text-teal-600 w-4 h-4"
+                      />
+                      <div>
+                        <span className="font-semibold block text-slate-800 dark:text-slate-200">View Attendance Audit</span>
+                        <span className="text-[10px] text-slate-400 block">Biometric reconciliation portal</span>
+                      </div>
+                    </label>
+
+                    <label className="flex items-center gap-2 p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={newCanManageAttendance}
+                        onChange={(e) => {
+                          setNewCanManageAttendance(e.target.checked);
+                          if (e.target.checked) setNewCanViewAttendance(true);
+                        }}
+                        className="rounded text-amber-600 w-4 h-4"
+                      />
+                      <div>
+                        <span className="font-semibold block text-slate-800 dark:text-slate-200">Manage Attendance Data</span>
+                        <span className="text-[10px] text-slate-400 block">Upload, edit & delete audit records</span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
               </div>
 
               {/* Requester-specific: Department & Approver */}
@@ -1316,6 +1608,13 @@ export default function AdminView({ user }) {
                 </div>
               )}
 
+              {newRole === 'viewer' && (
+                <div className="p-3 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-xs text-indigo-800 dark:text-indigo-300">
+                  <span className="font-bold block">Company Monitor & Auditor (Viewer):</span>
+                  Has full read-only visibility into all company Double OT requests and attendance reconciliation across all departments without approving or creating requests (e.g. Mr. Nimesh & Mr. Niranjan style).
+                </div>
+              )}
+
               <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2">
                 <button
                   type="button"
@@ -1381,7 +1680,112 @@ export default function AdminView({ user }) {
                 />
               </div>
 
-              {editingUser.role === 'requester' && (
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  User Role / System Responsibility
+                </label>
+                <select
+                  value={editRole}
+                  onChange={(e) => setEditRole(e.target.value)}
+                  disabled={editingUser.username === 'Admin'}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium"
+                >
+                  <option value="requester">Department Requester</option>
+                  <option value="approver_l1">Level 1 Approver (HOD)</option>
+                  <option value="viewer">Plant Monitor & Auditor (Viewer)</option>
+                  <option value="approver_final">Final Approver (Vinod)</option>
+                  <option value="admin">System Administrator</option>
+                </select>
+              </div>
+
+              {/* Access Control & Permissions Box */}
+              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                      Login Access Status
+                    </span>
+                    <span className="text-[10px] text-slate-400">Controls portal login permission</span>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer font-bold text-xs text-slate-800 dark:text-slate-200">
+                    <input
+                      type="checkbox"
+                      checked={editIsActive}
+                      onChange={(e) => setEditIsActive(e.target.checked)}
+                      disabled={editingUser.username === 'Admin'}
+                      className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
+                    />
+                    <span className={editIsActive ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-600'}>
+                      {editIsActive ? 'Access Granted (Active)' : 'Access Revoked (Blocked)'}
+                    </span>
+                  </label>
+                </div>
+
+                <div className="pt-2 border-t border-slate-200 dark:border-slate-700 space-y-2">
+                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block uppercase tracking-wider">
+                    Permissions & Access:
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    <label className="flex items-center gap-2 p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={editCanViewAllPending}
+                        onChange={(e) => setEditCanViewAllPending(e.target.checked)}
+                        className="rounded text-blue-600 w-4 h-4"
+                      />
+                      <div>
+                        <span className="font-semibold block text-slate-800 dark:text-slate-200">View All Requests</span>
+                        <span className="text-[10px] text-slate-400 block">Monitor all company departments</span>
+                      </div>
+                    </label>
+
+                    <label className="flex items-center gap-2 p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={editCanViewCharts}
+                        onChange={(e) => setEditCanViewCharts(e.target.checked)}
+                        className="rounded text-purple-600 w-4 h-4"
+                      />
+                      <div>
+                        <span className="font-semibold block text-slate-800 dark:text-slate-200">View Analytics Charts</span>
+                        <span className="text-[10px] text-slate-400 block">Double OT bar charts & metrics</span>
+                      </div>
+                    </label>
+
+                    <label className="flex items-center gap-2 p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={editCanViewAttendance}
+                        onChange={(e) => setEditCanViewAttendance(e.target.checked)}
+                        className="rounded text-teal-600 w-4 h-4"
+                      />
+                      <div>
+                        <span className="font-semibold block text-slate-800 dark:text-slate-200">View Attendance Audit</span>
+                        <span className="text-[10px] text-slate-400 block">Biometric Double OT reconciliation</span>
+                      </div>
+                    </label>
+
+                    <label className="flex items-center gap-2 p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={editCanManageAttendance}
+                        onChange={(e) => {
+                          setEditCanManageAttendance(e.target.checked);
+                          if (e.target.checked) setEditCanViewAttendance(true);
+                        }}
+                        className="rounded text-amber-600 w-4 h-4"
+                      />
+                      <div>
+                        <span className="font-semibold block text-slate-800 dark:text-slate-200">Manage Attendance Data</span>
+                        <span className="text-[10px] text-slate-400 block">Upload, edit & delete audit records</span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {editRole === 'requester' && (
                 <>
                   <div>
                     <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
@@ -1414,7 +1818,7 @@ export default function AdminView({ user }) {
                 </>
               )}
 
-              {editingUser.role === 'approver_l1' && (
+              {editRole === 'approver_l1' && (
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     Approved Departments (comma-separated)
@@ -1425,6 +1829,13 @@ export default function AdminView({ user }) {
                     onChange={(e) => setEditApprovedDepts(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                   />
+                </div>
+              )}
+
+              {editRole === 'viewer' && (
+                <div className="p-3 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-xs text-indigo-800 dark:text-indigo-300">
+                  <span className="font-bold block">Company Monitor & Auditor (Viewer):</span>
+                  Full plant-wide monitoring and Double OT attendance cross-audit visibility without creating or approving requests.
                 </div>
               )}
 

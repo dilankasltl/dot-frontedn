@@ -173,6 +173,18 @@ export const api = {
     return res.json();
   },
 
+  toggleUserAccess: async (id) => {
+    const res = await fetch(`${API_BASE}/admin/users/${id}/toggle-access`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to toggle user access');
+    }
+    return res.json();
+  },
+
   deleteAdminUser: async (id) => {
     const res = await fetch(`${API_BASE}/admin/users/${id}`, {
       method: 'DELETE'

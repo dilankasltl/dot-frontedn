@@ -27,6 +27,10 @@ const PRESET_USERS = {
   ],
   approverFinal: [
     { username: 'Vinod', label: 'Mr. Vinod', scope: 'Final Approval (All Departments) + Executive Analytics' }
+  ],
+  viewers: [
+    { username: 'Nimesh', label: 'Mr. Nimesh', scope: 'Plant Monitor & Double OT Attendance Auditor' },
+    { username: 'Niranjan', label: 'Mr. Niranjan', scope: 'Plant-wide Executive Monitor & Auditor' }
   ]
 };
 
@@ -46,6 +50,7 @@ export default function LoginModal({ onLogin, theme, onToggleTheme }) {
           const reqs = [];
           const hods = [];
           const finals = [];
+          const viewers = [];
 
           users.forEach((u) => {
             // Keep Admin strictly hidden from the public selection list
@@ -72,13 +77,20 @@ export default function LoginModal({ onLogin, theme, onToggleTheme }) {
                 label: u.name,
                 scope: 'Final Authority (All Departments) + Analytics'
               });
+            } else if (u.role === 'viewer') {
+              viewers.push({
+                username: u.username,
+                label: u.name,
+                scope: u.canManageAttendance ? 'Plant Monitor & Double OT Auditor' : 'Plant-wide Monitor'
+              });
             }
           });
 
           setLiveUsers({
             requesters: reqs.length > 0 ? reqs : PRESET_USERS.requesters,
             approversL1: hods.length > 0 ? hods : PRESET_USERS.approversL1,
-            approverFinal: finals.length > 0 ? finals : PRESET_USERS.approverFinal
+            approverFinal: finals.length > 0 ? finals : PRESET_USERS.approverFinal,
+            viewers: viewers.length > 0 ? viewers : PRESET_USERS.viewers
           });
         }
       } catch (err) {
@@ -391,12 +403,21 @@ export default function LoginModal({ onLogin, theme, onToggleTheme }) {
               </button>
               <button
                 type="button"
+                onClick={() => setActiveTab('viewers')}
+                className={`flex-1 py-1.5 rounded-md transition-all cursor-pointer ${
+                  activeTab === 'viewers' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white font-bold shadow-xs' : 'hover:text-slate-900'
+                }`}
+              >
+                3. Monitors ({liveUsers.viewers?.length || 0})
+              </button>
+              <button
+                type="button"
                 onClick={() => setActiveTab('approverFinal')}
                 className={`flex-1 py-1.5 rounded-md transition-all cursor-pointer ${
                   activeTab === 'approverFinal' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white font-bold shadow-xs' : 'hover:text-slate-900'
                 }`}
               >
-                3. Mr. Vinod (Final)
+                4. Final (Vinod)
               </button>
             </div>
 
@@ -441,6 +462,30 @@ export default function LoginModal({ onLogin, theme, onToggleTheme }) {
                       <span className="font-bold text-slate-900 dark:text-white">{u.label}</span>
                       <span className="px-1.5 py-0.5 rounded text-[10px] bg-indigo-100 dark:bg-indigo-900/60 text-indigo-800 dark:text-indigo-300 font-medium">
                         HOD
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate" title={u.scope}>
+                      {u.scope}
+                    </div>
+                  </button>
+                ))}
+
+              {activeTab === 'viewers' &&
+                (liveUsers.viewers || []).map((u) => (
+                  <button
+                    key={u.username}
+                    type="button"
+                    onClick={() => selectUser(u.username)}
+                    className={`text-left p-2.5 rounded-xl border text-xs transition-all cursor-pointer ${
+                      username === u.username
+                        ? 'border-indigo-500 bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-300 font-semibold shadow-2xs'
+                        : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 bg-slate-50/50 dark:bg-slate-800/50 text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-900 dark:text-white">{u.label}</span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-indigo-100 dark:bg-indigo-900/60 text-indigo-800 dark:text-indigo-300 font-medium">
+                        Monitor
                       </span>
                     </div>
                     <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate" title={u.scope}>
