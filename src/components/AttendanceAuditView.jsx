@@ -307,8 +307,8 @@ export default function AttendanceAuditView({ user }) {
           const isOffShift = shiftName.toLowerCase() === 'off' || shiftName.toLowerCase().includes('off');
           const isHighHours = workHrs >= 19;
 
-          // Double OT is strictly: Shift = 'off' AND Present = 'yes' (Off day එකේ වැඩ කළ අය)
-          // 24 Hours Duty is strictly: Work Hrs >= 19 (පැය 19 හෝ ඊට වැඩි කාලයක් වැඩ කළ අය)
+          // Double OT is strictly: Shift = 'off' AND Present = 'yes' (Worked on Off Day)
+          // 24 Hours Duty is strictly: Work Hrs >= 19 (Worked 19+ continuous hours)
           const isDot = isOffShift && isPresentYes;
           const is24Hours = isHighHours;
 
@@ -715,7 +715,7 @@ export default function AttendanceAuditView({ user }) {
               }`}
             >
               <Calendar className="w-3.5 h-3.5" />
-              <span>Single Day (දිනපතා)</span>
+              <span>Single Day</span>
             </button>
 
             <button
@@ -733,7 +733,7 @@ export default function AttendanceAuditView({ user }) {
               }`}
             >
               <CalendarRange className="w-3.5 h-3.5" />
-              <span>Month-Wise (මාසික)</span>
+              <span>Month-Wise</span>
             </button>
 
             <button
@@ -753,7 +753,7 @@ export default function AttendanceAuditView({ user }) {
               }`}
             >
               <CalendarRange className="w-3.5 h-3.5" />
-              <span>Date Range (දින පරාසය)</span>
+              <span>Date Range</span>
             </button>
           </div>
 
