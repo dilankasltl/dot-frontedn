@@ -22,7 +22,8 @@ import {
   BarChart3,
   TrendingUp,
   PieChart as PieIcon,
-  Layers
+  Layers,
+  CalendarRange
 } from 'lucide-react';
 import {
   BarChart,
@@ -39,13 +40,21 @@ import * as XLSX from 'xlsx';
 import { api } from '../api';
 
 export default function AttendanceAuditView({ user }) {
+  // Filter View Mode: 'single' | 'month' | 'range'
+  const [filterMode, setFilterMode] = useState('single');
   const [selectedDate, setSelectedDate] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
   const [availableDates, setAvailableDates] = useState([]);
+  const [availableMonths, setAvailableMonths] = useState([]);
+  const [availableAudits, setAvailableAudits] = useState([]);
   const [auditData, setAuditData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState(null);
-  const [graphTab, setGraphTab] = useState('all'); // 'all' | 'status' | 'criteria'
+  const [graphTab, setGraphTab] = useState('all'); // 'all' | 'trend' | 'dept' | 'unit' | '24hrs' | 'status'
   
   // Table filters & search
   const [searchFilter, setSearchFilter] = useState('');
@@ -78,20 +87,104 @@ export default function AttendanceAuditView({ user }) {
   const [newDepartment, setNewDepartment] = useState('');
   const [newUnit, setNewUnit] = useState('');
 
-  // Load audit data for a given date
-  const loadAuditData = async (dateToLoad = '') => {
+  // Format month string helper (e.g. '2026-10' -> 'October 2026')
+  const formatMonthName = (mStr) => {
+    if (!mStr) return '';
+    try {
+      const parts = String(mStr).split('-');
+      if (parts.length === 2) {
+        const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, 1);
+        return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      }
+    } catch {}
+    return mStr;
+  };
+
+  // Quick Presets for Date Range mode
+  const handlePresetRange = (days) => {
+    if (availableDates.length === 0) return;
+    const sorted = [...availableDates].sort();
+    const latestDateStr = sorted[sorted.length - 1];
+    const latestDate = new Date(latestDateStr);
+    const pastDate = new Date(latestDate);
+    pastDate.setDate(pastDate.getDate() - (days - 1));
+    const startStr = pastDate.toISOString().split('T')[0];
+    setStartDate(startStr);
+    setEndDate(latestDateStr);
+    loadAuditData({ mode: 'range', startDate: startStr, endDate: latestDateStr });
+  };
+
+  const handleAllDates = () => {
+    if (availableDates.length === 0) return;
+    const sorted = [...availableDates].sort();
+    const startStr = sorted[0];
+    const endStr = sorted[sorted.length - 1];
+    setStartDate(startStr);
+    setEndDate(endStr);
+    loadAuditData({ mode: 'range', startDate: startStr, endDate: endStr });
+  };
+
+  // Load audit data supporting single date, month, or custom date range
+  const loadAuditData = async (paramOverrides = {}) => {
     setLoading(true);
     setMessage(null);
     try {
-      const data = await api.getAttendanceAudit(dateToLoad);
+      let queryParams = {};
+      if (typeof paramOverrides === 'string') {
+        queryParams = { mode: 'single', date: paramOverrides };
+      } else {
+        const mode = paramOverrides.mode || filterMode;
+        if (mode === 'month') {
+          queryParams = {
+            mode: 'month',
+            month: paramOverrides.month || selectedMonth || (availableMonths[0] || '')
+          };
+        } else if (mode === 'range') {
+          queryParams = {
+            mode: 'range',
+            startDate: paramOverrides.startDate || startDate,
+            endDate: paramOverrides.endDate || endDate
+          };
+        } else {
+          queryParams = {
+            mode: 'single',
+            date: paramOverrides.date || selectedDate
+          };
+        }
+      }
+
+      const data = await api.getAttendanceAudit(queryParams);
       setAvailableDates(data.availableDates || []);
+      setAvailableMonths(data.availableMonths || []);
+      setAvailableAudits(data.availableAudits || []);
       setAuditData(data.audit || null);
-      if (data.audit && data.audit.reportDate) {
-        setSelectedDate(data.audit.reportDate);
-      } else if (dateToLoad) {
-        setSelectedDate(dateToLoad);
-      } else if (data.availableDates && data.availableDates.length > 0) {
-        setSelectedDate(data.availableDates[0]);
+
+      if (data.filterMode) {
+        setFilterMode(data.filterMode);
+      }
+
+      if (data.targetMonth) {
+        setSelectedMonth(data.targetMonth);
+      } else if (!selectedMonth && data.availableMonths && data.availableMonths.length > 0) {
+        setSelectedMonth(data.availableMonths[0]);
+      }
+
+      if (data.startDate && data.endDate) {
+        setStartDate(data.startDate);
+        setEndDate(data.endDate);
+      } else if (!startDate && data.availableDates && data.availableDates.length > 0) {
+        setStartDate(data.availableDates[data.availableDates.length - 1]);
+        setEndDate(data.availableDates[0]);
+      }
+
+      if (data.filterMode === 'single') {
+        if (data.audit && data.audit.reportDate) {
+          setSelectedDate(data.audit.reportDate);
+        } else if (queryParams.date) {
+          setSelectedDate(queryParams.date);
+        } else if (data.availableDates && data.availableDates.length > 0 && !selectedDate) {
+          setSelectedDate(data.availableDates[0]);
+        }
       }
     } catch (err) {
       console.error('Failed to load attendance audit', err);
@@ -280,7 +373,9 @@ export default function AttendanceAuditView({ user }) {
         });
 
         // Reload fresh audit data
-        await loadAuditData(effectiveReportDate);
+        setFilterMode('single');
+        setSelectedDate(effectiveReportDate);
+        await loadAuditData({ mode: 'single', date: effectiveReportDate });
       } catch (err) {
         console.error('File parse error:', err);
         setMessage({ type: 'error', text: err.message || 'Failed to process attendance file.' });
@@ -427,7 +522,8 @@ export default function AttendanceAuditView({ user }) {
       const matchDept = String(r.department || '').toLowerCase().includes(q);
       const matchUnit = String(r.unit || '').toLowerCase().includes(q);
       const matchShift = String(r.shiftName || '').toLowerCase().includes(q);
-      if (!matchEpf && !matchName && !matchDept && !matchUnit && !matchShift) return false;
+      const matchDate = String(r.firstDate || r.reportDate || '').toLowerCase().includes(q);
+      if (!matchEpf && !matchName && !matchDept && !matchUnit && !matchShift && !matchDate) return false;
     }
 
     return true;
@@ -443,6 +539,22 @@ export default function AttendanceAuditView({ user }) {
   const notApprovedCount = records.filter(r => r.vinodStatus === 'NOT_APPROVED').length;
   const pendingCount = records.filter(r => r.vinodStatus === 'PENDING').length;
   const bothCount = records.filter(r => (r.isDot || String(r.shiftName).toLowerCase().includes('off')) && (r.is24Hours || Number(r.workHrs || 0) >= 19)).length;
+
+  // Daily Incidents Timeline / Trend (Chronological day-by-day distribution)
+  const dailyTrendMap = {};
+  records.forEach(r => {
+    const d = r.firstDate || r.reportDate || 'Unknown';
+    if (!dailyTrendMap[d]) {
+      dailyTrendMap[d] = { date: d, dot: 0, twentyFour: 0, approved: 0, total: 0 };
+    }
+    dailyTrendMap[d].total++;
+    const isDot = r.isDot || (String(r.shiftName).toLowerCase().includes('off') && String(r.present).toLowerCase() === 'yes');
+    const is24 = r.is24Hours || Number(r.workHrs || 0) >= 19;
+    if (isDot) dailyTrendMap[d].dot++;
+    if (is24) dailyTrendMap[d].twentyFour++;
+    if (r.vinodStatus === 'APPROVED') dailyTrendMap[d].approved++;
+  });
+  const dailyTrendData = Object.values(dailyTrendMap).sort((a, b) => a.date.localeCompare(b.date));
 
   // Department-Wise Chart Data
   const deptMap = {};
@@ -564,7 +676,7 @@ export default function AttendanceAuditView({ user }) {
           )}
 
           <button
-            onClick={() => loadAuditData(selectedDate)}
+            onClick={() => loadAuditData()}
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
@@ -585,50 +697,280 @@ export default function AttendanceAuditView({ user }) {
         </div>
       )}
 
-      {/* Date Selector & Distinct 5 KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
-        {/* Date Selector Box */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-2xs flex flex-col justify-between">
-          <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5 text-blue-500" /> Select Date:
-            </label>
-            {availableDates.length > 0 ? (
-              <select
-                value={selectedDate}
-                onChange={(e) => {
-                  setSelectedDate(e.target.value);
-                  loadAuditData(e.target.value);
-                }}
-                className="w-full px-2.5 py-1.5 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-white bg-white dark:bg-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+      {/* PERIOD FILTER CONTROLS BAR (Single Day, Month-Wise, Date Range) */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-2xs space-y-3 transition-colors">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          {/* Mode Switcher Tabs */}
+          <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl w-fit">
+            <button
+              type="button"
+              onClick={() => {
+                setFilterMode('single');
+                loadAuditData({ mode: 'single', date: selectedDate || (availableDates[0] || '') });
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                filterMode === 'single'
+                  ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              <span>Single Day (දිනපතා)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setFilterMode('month');
+                const targetM = selectedMonth || (availableMonths[0] || (selectedDate ? selectedDate.slice(0, 7) : ''));
+                setSelectedMonth(targetM);
+                loadAuditData({ mode: 'month', month: targetM });
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                filterMode === 'month'
+                  ? 'bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-400 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <CalendarRange className="w-3.5 h-3.5" />
+              <span>Month-Wise (මාසික)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setFilterMode('range');
+                const s = startDate || (availableDates.length > 0 ? availableDates[availableDates.length - 1] : '');
+                const e = endDate || (availableDates.length > 0 ? availableDates[0] : '');
+                setStartDate(s);
+                setEndDate(e);
+                loadAuditData({ mode: 'range', startDate: s, endDate: e });
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                filterMode === 'range'
+                  ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <CalendarRange className="w-3.5 h-3.5" />
+              <span>Date Range (දින පරාසය)</span>
+            </button>
+          </div>
+
+          {/* Quick Info Badge for active mode */}
+          <div className="flex items-center gap-2 text-xs">
+            {auditData && (
+              <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold flex items-center gap-1.5">
+                <FileCheck className="w-3.5 h-3.5 text-emerald-500" />
+                <span>
+                  {filterMode === 'single'
+                    ? `1 Day Report Loaded`
+                    : `${auditData.daysCount || 0} Daily Audit(s) Combined`}
+                </span>
+              </span>
+            )}
+            {filterMode === 'single' && auditData && canManage && (
+              <button
+                type="button"
+                onClick={handleDeleteReport}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-900 transition-colors cursor-pointer"
+                title="Permanently delete this day's Double OT report for all users"
               >
-                {availableDates.map(d => (
-                  <option key={d} value={d}>Report: {d}</option>
-                ))}
-              </select>
-            ) : (
-              <p className="text-xs text-slate-400 italic">No reports loaded.</p>
+                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                <span>Delete Day Report</span>
+              </button>
             )}
           </div>
-          {auditData && (
-            <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400">
-              <div>By: <span className="font-semibold text-slate-700 dark:text-slate-200">{auditData.uploadedBy}</span></div>
-              {canManage && (
-                <button
-                  type="button"
-                  onClick={handleDeleteReport}
-                  className="mt-2 w-full inline-flex items-center justify-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-900 transition-colors cursor-pointer"
-                  title="Permanently delete this day's Double OT report for all users"
-                >
-                  <Trash2 className="w-3 h-3 text-rose-600" />
-                  <span>Delete Day Report</span>
-                </button>
-              )}
-            </div>
-          )}
         </div>
 
-        {/* KPI: Double OT (Off Day Worked) */}
+        {/* Dynamic Controls based on selected Filter Mode */}
+        {filterMode === 'single' && (
+          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5 text-blue-500" />
+                <span>Select Daily Audit:</span>
+              </label>
+              {availableDates.length > 0 ? (
+                <select
+                  value={selectedDate}
+                  onChange={(e) => {
+                    setSelectedDate(e.target.value);
+                    loadAuditData({ mode: 'single', date: e.target.value });
+                  }}
+                  className="px-3 py-1.5 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-white bg-white dark:bg-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                >
+                  {availableDates.map(d => (
+                    <option key={d} value={d}>Report: {d}</option>
+                  ))}
+                </select>
+              ) : (
+                <span className="text-xs text-slate-400 italic">No reports uploaded yet.</span>
+              )}
+            </div>
+
+            {auditData && auditData.uploadedBy && (
+              <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                Uploaded by: <strong className="text-slate-700 dark:text-slate-200">{auditData.uploadedBy}</strong>
+              </span>
+            )}
+          </div>
+        )}
+
+        {filterMode === 'month' && (
+          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                <CalendarRange className="w-3.5 h-3.5 text-purple-500" />
+                <span>Select Month:</span>
+              </label>
+
+              {availableMonths.length > 0 ? (
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => {
+                    setSelectedMonth(e.target.value);
+                    loadAuditData({ mode: 'month', month: e.target.value });
+                  }}
+                  className="px-3 py-1.5 border border-purple-300 dark:border-purple-800 rounded-xl text-xs font-bold text-purple-900 dark:text-purple-200 bg-purple-50/50 dark:bg-purple-950/40 focus:outline-hidden focus:ring-2 focus:ring-purple-500 cursor-pointer"
+                >
+                  {availableMonths.map(m => (
+                    <option key={m} value={m}>{formatMonthName(m)} ({m})</option>
+                  ))}
+                </select>
+              ) : null}
+
+              {/* Native month picker */}
+              <input
+                type="month"
+                value={selectedMonth}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    setSelectedMonth(e.target.value);
+                    loadAuditData({ mode: 'month', month: e.target.value });
+                  }
+                }}
+                className="px-2.5 py-1.5 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-white bg-white dark:bg-slate-800 focus:outline-hidden focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+
+            {/* Quick Month Pills */}
+            {availableMonths.length > 1 && (
+              <div className="flex flex-wrap items-center gap-1 text-xs">
+                <span className="text-[11px] text-slate-400 font-medium">Available:</span>
+                {availableMonths.slice(0, 4).map(m => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => {
+                      setSelectedMonth(m);
+                      loadAuditData({ mode: 'month', month: m });
+                    }}
+                    className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition-colors cursor-pointer ${
+                      selectedMonth === m
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                    }`}
+                  >
+                    {formatMonthName(m)}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {filterMode === 'range' && (
+          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                <CalendarRange className="w-3.5 h-3.5 text-emerald-500" />
+                <span>From:</span>
+              </span>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="px-2.5 py-1.5 border border-slate-300 dark:border-slate-700 rounded-xl font-bold text-slate-800 dark:text-white bg-white dark:bg-slate-800 focus:ring-2 focus:ring-emerald-500"
+              />
+
+              <span className="font-bold text-slate-700 dark:text-slate-300">To:</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="px-2.5 py-1.5 border border-slate-300 dark:border-slate-700 rounded-xl font-bold text-slate-800 dark:text-white bg-white dark:bg-slate-800 focus:ring-2 focus:ring-emerald-500"
+              />
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (startDate && endDate) {
+                    loadAuditData({ mode: 'range', startDate, endDate });
+                  } else {
+                    setMessage({ type: 'error', text: 'Please select both start and end date.' });
+                  }
+                }}
+                className="px-3.5 py-1.5 rounded-xl font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-98 transition-all cursor-pointer shadow-xs inline-flex items-center gap-1"
+              >
+                <Search className="w-3.5 h-3.5" />
+                <span>Apply Range</span>
+              </button>
+            </div>
+
+            {/* Quick Range Presets */}
+            <div className="flex flex-wrap items-center gap-1.5 text-xs">
+              <span className="text-[11px] text-slate-400 font-medium">Quick Presets:</span>
+              <button
+                type="button"
+                onClick={() => handlePresetRange(7)}
+                className="px-2 py-1 rounded-lg text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition-colors cursor-pointer"
+              >
+                Last 7 Days
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePresetRange(30)}
+                className="px-2 py-1 rounded-lg text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition-colors cursor-pointer"
+              >
+                Last 30 Days
+              </button>
+              <button
+                type="button"
+                onClick={handleAllDates}
+                className="px-2 py-1 rounded-lg text-[11px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 transition-colors cursor-pointer"
+              >
+                All Available Dates
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* DISTINCT 5 KPI CARDS */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+        {/* Card 1: Active Period Overview */}
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-blue-200 dark:border-blue-900/40 p-4 shadow-2xs bg-blue-50/20 dark:bg-blue-950/10 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-blue-800 dark:text-blue-300 flex items-center gap-1">
+              <Calendar className="w-3.5 h-3.5 text-blue-600" />
+              {filterMode === 'single' ? 'Single Day Audit' : (filterMode === 'month' ? 'Monthly Audit' : 'Date Range Audit')}
+            </p>
+            <h3 className="text-lg font-black text-blue-900 dark:text-blue-100 mt-1 truncate max-w-[150px]" title={filterMode === 'month' ? formatMonthName(selectedMonth) : (filterMode === 'range' ? `${startDate} to ${endDate}` : selectedDate)}>
+              {filterMode === 'month'
+                ? formatMonthName(selectedMonth || (auditData?.reportDate ? auditData.reportDate.slice(0,7) : ''))
+                : (filterMode === 'range' ? `${startDate || ''} → ${endDate || ''}` : (selectedDate || 'No Date'))}
+            </h3>
+            <p className="text-[11px] text-blue-700/80 dark:text-blue-400 mt-0.5 font-medium">
+              {auditData?.daysCount || 1} day(s) • {totalIncidents} incident(s)
+            </p>
+          </div>
+          <span className="w-11 h-11 rounded-xl bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 flex items-center justify-center font-bold">
+            <CalendarRange className="w-6 h-6" />
+          </span>
+        </div>
+
+        {/* Card 2: KPI: Double OT (Off Day Worked) */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-purple-200 dark:border-purple-900/40 p-4 shadow-2xs bg-purple-50/20 dark:bg-purple-950/10 flex items-center justify-between">
           <div>
             <p className="text-xs font-bold text-purple-800 dark:text-purple-300 flex items-center gap-1">
@@ -642,7 +984,7 @@ export default function AttendanceAuditView({ user }) {
           </span>
         </div>
 
-        {/* KPI: 24 Hours Duty (Work Hrs >= 19h) */}
+        {/* Card 3: KPI: 24 Hours Duty (Work Hrs >= 19h) */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-amber-200 dark:border-amber-900/40 p-4 shadow-2xs bg-amber-50/20 dark:bg-amber-950/10 flex items-center justify-between">
           <div>
             <p className="text-xs font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1">
@@ -656,7 +998,7 @@ export default function AttendanceAuditView({ user }) {
           </span>
         </div>
 
-        {/* KPI: Approved by Mr. Vinod */}
+        {/* Card 4: KPI: Approved by Mr. Vinod */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-emerald-200 dark:border-emerald-900/40 p-4 shadow-2xs bg-emerald-50/20 dark:bg-emerald-950/10 flex items-center justify-between">
           <div>
             <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1">
@@ -672,7 +1014,7 @@ export default function AttendanceAuditView({ user }) {
           </span>
         </div>
 
-        {/* KPI: Unauthorized / Not Approved Warning */}
+        {/* Card 5: KPI: Unauthorized / Not Approved Warning */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-rose-200 dark:border-rose-900/40 p-4 shadow-2xs bg-rose-50/20 dark:bg-rose-950/10 flex items-center justify-between">
           <div>
             <p className="text-xs font-bold text-rose-800 dark:text-rose-300 flex items-center gap-1">
@@ -853,10 +1195,28 @@ export default function AttendanceAuditView({ user }) {
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs overflow-hidden transition-colors">
         <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-              Double OT & 24 Hours Reconciliation Table ({filteredRecords.length} records)
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
+              <span>Double OT & 24 Hours Reconciliation Table</span>
+              {filterMode === 'month' && selectedMonth && (
+                <span className="px-2 py-0.5 rounded-md text-xs font-bold bg-purple-100 dark:bg-purple-950/70 text-purple-800 dark:text-purple-300">
+                  {formatMonthName(selectedMonth)}
+                </span>
+              )}
+              {filterMode === 'range' && (
+                <span className="px-2 py-0.5 rounded-md text-xs font-bold bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300">
+                  {startDate} to {endDate}
+                </span>
+              )}
+              {filterMode === 'single' && selectedDate && (
+                <span className="px-2 py-0.5 rounded-md text-xs font-bold bg-blue-100 dark:bg-blue-950/70 text-blue-800 dark:text-blue-300">
+                  {selectedDate}
+                </span>
+              )}
+              <span className="text-xs font-normal text-slate-500 dark:text-slate-400">
+                ({filteredRecords.length} records)
+              </span>
             </h3>
-            <span className="text-[11px] text-slate-400">
+            <span className="text-[11px] text-slate-400 block w-full sm:w-auto">
               Double OT: (Shift = 'Off' & Present = 'Yes') • 24 Hours Duty: (Work Hrs ≥ 19)
             </span>
           </div>
@@ -875,15 +1235,16 @@ export default function AttendanceAuditView({ user }) {
             {filteredRecords.length > 0 && (
               <button
                 onClick={() => {
+                  const periodTag = filterMode === 'month' ? (selectedMonth || 'Month') : (filterMode === 'range' ? `${startDate}_to_${endDate}` : (selectedDate || 'Report'));
                   const ws = XLSX.utils.json_to_sheet(filteredRecords.map(r => ({
                     'EPF NO': r.epfNo,
                     'Full Name': r.fullName,
+                    'Date': r.firstDate || r.reportDate || selectedDate,
                     'Department': r.department || 'General',
                     'Unit': r.unit || 'General',
                     'Category': r.isDot && r.is24Hours ? 'Both (Off Day & 24h)' : (r.isDot ? 'Double OT (Off Day)' : '24 Hours Duty'),
                     'Shift Name': r.shiftName,
                     'Present': r.present,
-                    'First Date': r.firstDate,
                     'Work Hrs': r.workHrs,
                     'DOT / Duty Reason': r.dotReason,
                     'Mr. Vinod Approval': r.vinodStatus,
@@ -891,7 +1252,7 @@ export default function AttendanceAuditView({ user }) {
                   })));
                   const wb = XLSX.utils.book_new();
                   XLSX.utils.book_append_sheet(wb, ws, 'DOT_24Hrs_Audit');
-                  XLSX.writeFile(wb, `DOT_24Hrs_Attendance_Audit_${selectedDate || 'Report'}.xlsx`);
+                  XLSX.writeFile(wb, `DOT_24Hrs_Attendance_Audit_${periodTag}.xlsx`);
                 }}
                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
               >
@@ -906,7 +1267,7 @@ export default function AttendanceAuditView({ user }) {
         ) : !auditData ? (
           <div className="p-12 text-center text-xs text-slate-400">
             <FileSpreadsheet className="w-10 h-10 text-slate-300 dark:text-slate-700 mx-auto mb-2" />
-            <p className="font-semibold text-slate-600 dark:text-slate-400">No attendance report loaded for this date.</p>
+            <p className="font-semibold text-slate-600 dark:text-slate-400">No attendance report loaded for this period.</p>
             {canUpload && (
               <p className="text-slate-400 mt-1">Please upload the biometric attendance CSV or Excel file above to begin reconciliation.</p>
             )}
@@ -922,12 +1283,12 @@ export default function AttendanceAuditView({ user }) {
                 <tr>
                   <th className="py-3 px-3">Number (EPF)</th>
                   <th className="py-3 px-3">Full Name (Auto-Matched)</th>
+                  <th className="py-3 px-3">Date</th>
                   <th className="py-3 px-3">Department</th>
                   <th className="py-3 px-3">Unit</th>
                   <th className="py-3 px-3">Category</th>
                   <th className="py-3 px-3">Shift Name</th>
                   <th className="py-3 px-3 text-center">Present</th>
-                  <th className="py-3 px-3">First Date</th>
                   <th className="py-3 px-3 text-center">Work Hrs</th>
                   <th className="py-3 px-3">DOT / Duty Reason</th>
                   <th className="py-3 px-3 text-right">Mr. Vinod Approval</th>
@@ -947,25 +1308,30 @@ export default function AttendanceAuditView({ user }) {
                       </td>
 
                       {/* 2. Full Name (Auto-Matched) */}
-                      <td className="py-3 px-3 font-semibold text-slate-900 dark:text-white">
+                      <td className="py-3 px-3 font-semibold text-slate-900 dark:text-white whitespace-nowrap">
                         {r.fullName}
                       </td>
 
-                      {/* 3. Department Column */}
+                      {/* 3. Date */}
+                      <td className="py-3 px-3 font-mono text-[11px] text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                        {r.firstDate || r.reportDate || selectedDate}
+                      </td>
+
+                      {/* 4. Department Column */}
                       <td className="py-3 px-3">
                         <span className="font-semibold text-slate-800 dark:text-slate-200">
                           {r.department || 'General'}
                         </span>
                       </td>
 
-                      {/* 4. Unit Column */}
+                      {/* 5. Unit Column */}
                       <td className="py-3 px-3">
                         <span className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                           {r.unit || 'General'}
                         </span>
                       </td>
 
-                      {/* 5. Distinct Category Badge */}
+                      {/* 6. Distinct Category Badge */}
                       <td className="py-3 px-3 whitespace-nowrap">
                         {isOffDay && is24h ? (
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 border border-blue-300 dark:border-blue-800">
@@ -982,7 +1348,7 @@ export default function AttendanceAuditView({ user }) {
                         )}
                       </td>
 
-                      {/* 6. Shift Name */}
+                      {/* 7. Shift Name */}
                       <td className="py-3 px-3">
                         <span className={`px-2 py-0.5 rounded font-bold text-[11px] ${
                           String(r.shiftName).toLowerCase() === 'off'
@@ -993,7 +1359,7 @@ export default function AttendanceAuditView({ user }) {
                         </span>
                       </td>
 
-                      {/* 7. Present */}
+                      {/* 8. Present */}
                       <td className="py-3 px-3 text-center">
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                           String(r.present).toLowerCase() === 'yes'
@@ -1002,11 +1368,6 @@ export default function AttendanceAuditView({ user }) {
                         }`}>
                           {r.present}
                         </span>
-                      </td>
-
-                      {/* 8. First Date */}
-                      <td className="py-3 px-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                        {r.firstDate}
                       </td>
 
                       {/* 9. Work Hrs */}
@@ -1117,14 +1478,16 @@ export default function AttendanceAuditView({ user }) {
                 <BarChart3 className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
               </span>
               <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
                   <span>Double OT & 24 Hours Duty Visual Analytics</span>
                   <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                    {selectedDate}
+                    {filterMode === 'month'
+                      ? formatMonthName(selectedMonth || (auditData?.reportDate ? auditData.reportDate.slice(0, 7) : ''))
+                      : (filterMode === 'range' ? `${startDate} to ${endDate}` : selectedDate)}
                   </span>
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Visual breakdown across Departments, Units, 24 Hours Duty shifts, and Mr. Vinod's Approvals
+                  Visual breakdown across Daily Timelines, Departments, Units, 24 Hours Duty shifts, and Mr. Vinod's Approvals
                 </p>
               </div>
             </div>
@@ -1141,6 +1504,18 @@ export default function AttendanceAuditView({ user }) {
               >
                 All Visuals
               </button>
+              {dailyTrendData.length > 1 && (
+                <button
+                  onClick={() => setGraphTab('trend')}
+                  className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                    graphTab === 'trend'
+                      ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-300 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <CalendarRange className="w-3.5 h-3.5" /> Daily Timeline ({dailyTrendData.length}d)
+                </button>
+              )}
               <button
                 onClick={() => setGraphTab('dept')}
                 className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1 ${
@@ -1214,6 +1589,43 @@ export default function AttendanceAuditView({ user }) {
 
           {/* CHARTS CONTAINER */}
           <div className="space-y-6">
+            {/* 0. DAILY TIMELINE TREND GRAPH (Especially useful in Month-Wise and Range modes) */}
+            {(graphTab === 'all' || graphTab === 'trend') && dailyTrendData.length > 1 && (
+              <div className="p-4 rounded-xl border border-indigo-200 dark:border-indigo-900/50 bg-indigo-50/20 dark:bg-indigo-950/20 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                    <CalendarRange className="w-3.5 h-3.5 text-indigo-500" />
+                    Daily Incidents Trend: Day-by-Day Double OT vs 24 Hours Duty vs Vinod Approved
+                  </h4>
+                  <span className="text-[10px] text-slate-400">
+                    {dailyTrendData.length} Audited Days Chronological Progression
+                  </span>
+                </div>
+                <div className="h-72 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={dailyTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 25 }}>
+                      <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                      <XAxis dataKey="date" tick={{ fontSize: 11 }} interval={0} angle={-15} textAnchor="end" />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#1e293b',
+                          borderColor: '#334155',
+                          borderRadius: '10px',
+                          color: '#fff',
+                          fontSize: '12px'
+                        }}
+                      />
+                      <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                      <Bar dataKey="dot" name="Double OT (Off Day)" fill="#a855f7" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="twentyFour" name="24 Hours Duty" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="approved" name="Vinod Approved" fill="#10b981" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+
             {/* 1. DEPARTMENT-WISE GRAPH */}
             {(graphTab === 'all' || graphTab === 'dept') && (
               <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 space-y-3">

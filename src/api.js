@@ -296,11 +296,21 @@ export const api = {
     return res.json();
   },
 
-  getAttendanceAudit: async (date = '') => {
-    const url = date 
-      ? `${API_BASE}/attendance-audit?date=${encodeURIComponent(date)}`
-      : `${API_BASE}/attendance-audit`;
-    const res = await fetch(url);
+  getAttendanceAudit: async (params = {}) => {
+    let queryString = '';
+    if (typeof params === 'string') {
+      queryString = params ? `?date=${encodeURIComponent(params)}` : '';
+    } else if (params && typeof params === 'object') {
+      const q = new URLSearchParams();
+      if (params.mode) q.append('mode', params.mode);
+      if (params.date) q.append('date', params.date);
+      if (params.month) q.append('month', params.month);
+      if (params.startDate) q.append('startDate', params.startDate);
+      if (params.endDate) q.append('endDate', params.endDate);
+      const str = q.toString();
+      queryString = str ? `?${str}` : '';
+    }
+    const res = await fetch(`${API_BASE}/attendance-audit${queryString}`);
     if (!res.ok) {
       let msg = 'Failed to fetch attendance audit';
       try {
