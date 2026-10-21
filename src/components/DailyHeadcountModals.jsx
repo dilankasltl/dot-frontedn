@@ -48,7 +48,7 @@ export function LeaveDrilldownModal({ isOpen, onClose, records, selectedDate }) 
                 Employees on Leave ({filtered.length})
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Workforce records with Leave = 'Yes' (excluding #00001)
+                Workforce records with Leave = 'Yes'
               </p>
             </div>
           </div>
@@ -193,7 +193,7 @@ export function LateDrilldownModal({ isOpen, onClose, records, selectedDate, par
                 Employees Late &gt; 15 Minutes ({filtered.length})
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Workforce records with Late &gt; 00:15 (excluding #00001)
+                Workforce records with Late &gt; 00:15
               </p>
             </div>
           </div>

@@ -371,15 +371,6 @@ export default function AttendanceAuditView({ user }) {
           }
         }
 
-        if (extractedDotRecords.length === 0) {
-          setMessage({
-            type: 'error',
-            text: `No Double OT or 24 Hours Duty incidents found in this file (Checked ${totalCount} employee attendance rows).`
-          });
-          setUploading(false);
-          return;
-        }
-
         const effectiveReportDate = fallbackDate || new Date().toISOString().split('T')[0];
 
         // 4. Send structured records to backend for auto full-name lookup & Mr. Vinod approval cross-referencing
@@ -407,10 +398,17 @@ export default function AttendanceAuditView({ user }) {
           }
         }
 
-        setMessage({
-          type: 'success',
-          text: `Attendance for date ${effectiveReportDate} processed! Found ${extractedDotRecords.length} incidents: ${res.audit?.dotCount ?? extractedDotRecords.filter(r => r.isDot).length} Double OT (Off Day) & ${res.audit?.twentyFourHrsCount ?? extractedDotRecords.filter(r => r.is24Hours).length} 24 Hours Duty from ${totalCount} attendance records.`
-        });
+        if (extractedDotRecords.length === 0) {
+          setMessage({
+            type: 'info',
+            text: `Attendance for date ${effectiveReportDate} processed. No Double OT or 24 Hours Duty incidents found, and all ${allHeadcountRecords.length} employee records synced to Daily Headcount.`
+          });
+        } else {
+          setMessage({
+            type: 'success',
+            text: `Attendance for date ${effectiveReportDate} processed! Found ${extractedDotRecords.length} incidents: ${res.audit?.dotCount ?? extractedDotRecords.filter(r => r.isDot).length} Double OT (Off Day) & ${res.audit?.twentyFourHrsCount ?? extractedDotRecords.filter(r => r.is24Hours).length} 24 Hours Duty from ${totalCount} attendance records.`
+          });
+        }
 
         // Reload fresh audit data
         setFilterMode('single');
@@ -439,6 +437,11 @@ export default function AttendanceAuditView({ user }) {
     setLoading(true);
     try {
       await api.deleteAttendanceAudit(selectedDate);
+      try {
+        await api.deleteDailyHeadcount(selectedDate);
+      } catch (headcountDeleteErr) {
+        console.warn('Daily Headcount delete sync notice:', headcountDeleteErr);
+      }
       setMessage({ type: 'success', text: `Attendance report for ${selectedDate} has been deleted for all users.` });
       await loadAuditData();
     } catch (err) {

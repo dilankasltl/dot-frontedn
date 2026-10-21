@@ -5,7 +5,6 @@ import {
   Clock,
   Calendar,
   CalendarRange,
-  Upload,
   RefreshCw,
   Search,
   Building,
@@ -26,7 +25,6 @@ import {
   ResponsiveContainer,
   Cell
 } from 'recharts';
-import * as XLSX from 'xlsx';
 import { api } from '../api';
 import { DailyHeadcountTable } from './DailyHeadcountTable';
 import {
@@ -47,7 +45,6 @@ export default function DailyHeadcountView({ user }) {
   const [availableMonths, setAvailableMonths] = useState([]);
   const [headcountData, setHeadcountData] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState(null);
 
   // Table filters
@@ -181,187 +178,6 @@ export default function DailyHeadcountView({ user }) {
     setStartDate(startStr);
     setEndDate(endStr);
     loadHeadcountData({ mode: 'range', startDate: startStr, endDate: endStr });
-  };
-
-  const handleFileUpload = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploading(true);
-    setMessage({ type: 'info', text: `Parsing attendance report "${file.name}"...` });
-
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      try {
-        const binaryStr = evt.target?.result;
-        const workbook = XLSX.read(binaryStr, { type: 'binary' });
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-
-        if (!rawRows || rawRows.length < 3) {
-          throw new Error('Attendance file appears to be empty or unrecognized format.');
-        }
-
-        let extractedDateStr = '';
-        for (let i = 0; i < Math.min(5, rawRows.length); i++) {
-          const rowStr = rawRows[i].join(' ');
-          const dateMatch = rowStr.match(/(\d{1,2}\/\d{1,2}\/\d{4})/);
-          if (dateMatch) {
-            extractedDateStr = dateMatch[1];
-            break;
-          }
-        }
-
-        let headerRowIndex = -1;
-        let colMap = {};
-        for (let i = 0; i < Math.min(10, rawRows.length); i++) {
-          const row = rawRows[i].map(c => String(c).trim().toLowerCase());
-          if (row.some(c => c === 'number' || c === 'epf no' || c === 'epf') && row.some(c => c === 'present')) {
-            headerRowIndex = i;
-            row.forEach((colName, colIdx) => {
-              if (colName === 'department') colMap.department = colIdx;
-              if (colName === 'unit') colMap.unit = colIdx;
-              if (colName === 'number' || colName === 'epf no' || colName === 'epf') colMap.number = colIdx;
-              if (colName === 'full name' || colName === 'name') colMap.fullName = colIdx;
-              if (colName === 'gender') colMap.gender = colIdx;
-              if (colName === 'shift name' || colName === 'shift') colMap.shiftName = colIdx;
-              if (colName === 'present') colMap.present = colIdx;
-              if (colName === 'leave') colMap.leave = colIdx;
-              if (colName === 'first date' || colName === 'date') colMap.firstDate = colIdx;
-              if (colName === 'in time') colMap.inTime = colIdx;
-              if (colName === 'out time') colMap.outTime = colIdx;
-              if (colName === 'late') colMap.late = colIdx;
-              if (colName === 'work hrs' || colName === 'work hours') colMap.workHrs = colIdx;
-            });
-            break;
-          }
-        }
-
-        if (headerRowIndex === -1 || colMap.number === undefined) {
-          throw new Error('Could not identify table headers (Number/EPF, Present, Late, etc.).');
-        }
-
-        const extractedHeadcountRecords = [];
-        const extractedDotRecords = [];
-        let currentDept = 'General';
-        let currentUnit = 'General';
-        let fallbackDate = extractedDateStr;
-
-        for (let r = headerRowIndex + 1; r < rawRows.length; r++) {
-          const row = rawRows[r];
-          const deptCell = colMap.department !== undefined ? String(row[colMap.department] || '').trim() : '';
-          const unitCell = colMap.unit !== undefined ? String(row[colMap.unit] || '').trim() : '';
-          if (deptCell) {
-            currentDept = deptCell;
-            currentUnit = 'General';
-          }
-          if (unitCell) {
-            currentUnit = unitCell;
-          }
-
-          const rawNum = String(row[colMap.number] || '').trim();
-          if (!rawNum || rawNum.toLowerCase().includes('total') || rawNum.length > 10) continue;
-          if (rawNum === '00001' || rawNum === '1' || rawNum.endsWith('00001')) continue;
-
-          const rawFullName = colMap.fullName !== undefined ? String(row[colMap.fullName] || '').trim() : '';
-          const gender = colMap.gender !== undefined ? String(row[colMap.gender] || 'MALE').trim().toUpperCase() : 'MALE';
-          const shiftName = colMap.shiftName !== undefined ? String(row[colMap.shiftName] || '').trim() : '';
-          const present = colMap.present !== undefined ? String(row[colMap.present] || 'Yes').trim() : 'Yes';
-          const leave = colMap.leave !== undefined ? String(row[colMap.leave] || 'No').trim() : 'No';
-          const firstDate = colMap.firstDate !== undefined ? String(row[colMap.firstDate] || '').trim() : extractedDateStr;
-          const inTime = colMap.inTime !== undefined ? String(row[colMap.inTime] || '').trim() : '';
-          const outTime = colMap.outTime !== undefined ? String(row[colMap.outTime] || '').trim() : '';
-          const late = colMap.late !== undefined ? String(row[colMap.late] || '00:00').trim() : '00:00';
-          const workHrsRaw = colMap.workHrs !== undefined ? row[colMap.workHrs] : 0;
-          const workHrs = parseFloat(String(workHrsRaw).replace(',', '.')) || 0;
-
-          if (firstDate && !fallbackDate) fallbackDate = firstDate;
-
-          const lateMins = parseMinutes(late);
-          const isLateOver15 = lateMins > 15;
-
-          extractedHeadcountRecords.push({
-            epfNo: rawNum,
-            fullName: rawFullName,
-            department: currentDept,
-            unit: currentUnit,
-            gender: gender.includes('FEMALE') ? 'FEMALE' : 'MALE',
-            shiftName: shiftName || 'General GE',
-            present: present,
-            leave: leave,
-            firstDate: firstDate || fallbackDate,
-            inTime: inTime,
-            outTime: outTime,
-            late: late,
-            lateMinutes: lateMins,
-            isLateOver15: isLateOver15,
-            workHrs: workHrs
-          });
-
-          const isPresentYes = String(present).toLowerCase() === 'yes';
-          const isOffShift = shiftName.toLowerCase().includes('off');
-          const isHighHours = workHrs >= 19;
-          if ((isOffShift && isPresentYes) || isHighHours) {
-            extractedDotRecords.push({
-              epfNo: rawNum,
-              fullName: rawFullName,
-              department: currentDept,
-              unit: currentUnit,
-              shiftName: shiftName,
-              present: present,
-              firstDate: firstDate || fallbackDate,
-              workHrs: workHrs,
-              inTime: inTime,
-              outTime: outTime,
-              isDot: isOffShift && isPresentYes,
-              is24Hours: isHighHours
-            });
-          }
-        }
-
-        const effectiveReportDate = fallbackDate || new Date().toISOString().split('T')[0];
-
-        const payload = {
-          reportDate: effectiveReportDate,
-          rawDateStr: fallbackDate,
-          uploadedBy: user.name || user.username,
-          records: extractedHeadcountRecords
-        };
-
-        const res = await api.saveDailyHeadcount(payload);
-
-        if (extractedDotRecords.length > 0) {
-          try {
-            await api.saveAttendanceAudit({
-              reportDate: effectiveReportDate,
-              rawDateStr: fallbackDate,
-              uploadedBy: user.name || user.username,
-              totalReportRows: extractedHeadcountRecords.length,
-              records: extractedDotRecords
-            });
-          } catch (syncErr) {
-            console.warn('DOT sync background notice:', syncErr);
-          }
-        }
-
-        setMessage({
-          type: 'success',
-          text: `Daily Headcount for ${effectiveReportDate} saved successfully! Headcount: ${res.headcount?.headcount || extractedHeadcountRecords.length} (excl. 00001). Male: ${res.headcount?.maleCount}, Female: ${res.headcount?.femaleCount}, Present: ${res.headcount?.presentCount}, Leave: ${res.headcount?.leaveCount}, Late > 15m: ${res.headcount?.lateOver15Count}.`
-        });
-
-        setFilterMode('single');
-        setSelectedDate(effectiveReportDate);
-        await loadHeadcountData({ mode: 'single', date: effectiveReportDate });
-      } catch (err) {
-        console.error('File parse error:', err);
-        setMessage({ type: 'error', text: err.message || 'Failed to process attendance file' });
-      } finally {
-        setUploading(false);
-      }
-    };
-
-    reader.readAsBinaryString(file);
-    e.target.value = '';
   };
 
   const handleDeleteReport = async () => {
@@ -505,22 +321,6 @@ export default function DailyHeadcountView({ user }) {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {canManage && (
-            <label className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-white shadow-xs transition-colors cursor-pointer ${
-              uploading ? 'bg-slate-400 cursor-not-allowed' : 'bg-cyan-600 hover:bg-cyan-700 active:scale-98'
-            }`}>
-              <Upload className="w-3.5 h-3.5" />
-              <span>{uploading ? 'Parsing...' : 'Upload Attendance Report'}</span>
-              <input
-                type="file"
-                accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
-                onChange={handleFileUpload}
-                disabled={uploading}
-                className="hidden"
-              />
-            </label>
-          )}
-
           <button
             onClick={() => loadHeadcountData()}
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
@@ -774,7 +574,7 @@ export default function DailyHeadcountView({ user }) {
               {totalHeadcount}
             </h3>
             <p className="text-[11px] text-cyan-700/90 dark:text-cyan-400 mt-0.5 font-medium">
-              Excluding #00001 Admin
+              Total Workforce
             </p>
           </div>
           <span className="w-12 h-12 rounded-xl bg-cyan-100 dark:bg-cyan-900/60 text-cyan-700 dark:text-cyan-300 flex items-center justify-center font-bold">
@@ -879,6 +679,104 @@ export default function DailyHeadcountView({ user }) {
           </span>
         </div>
       </div>
+
+      {/* VISUAL ANALYTICS SECTION (CHARTS FIRST) */}
+      {headcountData && allRecords.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-2xs space-y-3">
+            <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <UserCheck className="w-4 h-4 text-emerald-500" />
+              <span>Plant Attendance Breakdown</span>
+            </h4>
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={attendanceBarData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                  <XAxis dataKey="category" tick={{ fontSize: 11 }} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#1e293b',
+                      borderColor: '#334155',
+                      borderRadius: '8px',
+                      color: '#fff',
+                      fontSize: '12px'
+                    }}
+                    formatter={(val) => [`${val} Employees`, 'Count']}
+                  />
+                  <Bar dataKey="count" radius={[6, 6, 0, 0]}>
+                    {attendanceBarData.map((entry, index) => (
+                      <Cell key={`attendance-cell-${index}`} fill={entry.fill} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-2xs space-y-3">
+            <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Building className="w-4 h-4 text-blue-500" />
+              <span>Department Headcount & Punctuality</span>
+            </h4>
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={deptChartData.slice(0, 6)} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                  <XAxis dataKey="department" tick={{ fontSize: 10 }} interval={0} angle={-15} textAnchor="end" />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#1e293b',
+                      borderColor: '#334155',
+                      borderRadius: '8px',
+                      color: '#fff',
+                      fontSize: '12px'
+                    }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                  <Bar dataKey="total" name="Total Headcount" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="present" name="Present" fill="#10b981" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="late" name="Late > 15m" fill="#f43f5e" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Timeline Chart in Multi-Day Mode */}
+      {dailyTimelineData.length > 1 && (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-2xs space-y-3">
+          <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <CalendarRange className="w-4 h-4 text-cyan-500" />
+            <span>Daily Headcount & Attendance Timeline Trend</span>
+          </h4>
+          <div className="h-72 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={dailyTimelineData} margin={{ top: 10, right: 10, left: -20, bottom: 25 }}>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} angle={-15} textAnchor="end" />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#1e293b',
+                    borderColor: '#334155',
+                    borderRadius: '8px',
+                    color: '#fff',
+                    fontSize: '12px'
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                <Bar dataKey="headcount" name="Headcount" fill="#06b6d4" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="present" name="Present" fill="#10b981" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="leave" name="Leave = Yes" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="lateOver15" name="Late > 15m" fill="#f43f5e" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
 
       {/* FILTER BAR: Status, Gender, Department, Unit, Search */}
       <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3 shadow-2xs transition-colors">
@@ -1046,104 +944,6 @@ export default function DailyHeadcountView({ user }) {
         onDelete={handleDeleteRecord}
         onAddNew={() => setShowAddModal(true)}
       />
-
-      {/* VISUAL ANALYTICS SECTION */}
-      {headcountData && allRecords.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-2xs space-y-3">
-            <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <UserCheck className="w-4 h-4 text-emerald-500" />
-              <span>Plant Attendance Breakdown</span>
-            </h4>
-            <div className="h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={attendanceBarData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                  <XAxis dataKey="category" tick={{ fontSize: 11 }} />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#1e293b',
-                      borderColor: '#334155',
-                      borderRadius: '8px',
-                      color: '#fff',
-                      fontSize: '12px'
-                    }}
-                    formatter={(val) => [`${val} Employees`, 'Count']}
-                  />
-                  <Bar dataKey="count" radius={[6, 6, 0, 0]}>
-                    {attendanceBarData.map((entry, index) => (
-                      <Cell key={`attendance-cell-${index}`} fill={entry.fill} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-2xs space-y-3">
-            <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <Building className="w-4 h-4 text-blue-500" />
-              <span>Department Headcount & Punctuality</span>
-            </h4>
-            <div className="h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={deptChartData.slice(0, 6)} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                  <XAxis dataKey="department" tick={{ fontSize: 10 }} interval={0} angle={-15} textAnchor="end" />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#1e293b',
-                      borderColor: '#334155',
-                      borderRadius: '8px',
-                      color: '#fff',
-                      fontSize: '12px'
-                    }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                  <Bar dataKey="total" name="Total Headcount" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="present" name="Present" fill="#10b981" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="late" name="Late > 15m" fill="#f43f5e" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Timeline Chart in Multi-Day Mode */}
-      {dailyTimelineData.length > 1 && (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-2xs space-y-3">
-          <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <CalendarRange className="w-4 h-4 text-cyan-500" />
-            <span>Daily Headcount & Attendance Timeline Trend</span>
-          </h4>
-          <div className="h-72 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dailyTimelineData} margin={{ top: 10, right: 10, left: -20, bottom: 25 }}>
-                <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} angle={-15} textAnchor="end" />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#1e293b',
-                    borderColor: '#334155',
-                    borderRadius: '8px',
-                    color: '#fff',
-                    fontSize: '12px'
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                <Bar dataKey="headcount" name="Headcount" fill="#06b6d4" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="present" name="Present" fill="#10b981" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="leave" name="Leave = Yes" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="lateOver15" name="Late > 15m" fill="#f43f5e" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
 
       {/* MODALS */}
       <LeaveDrilldownModal
