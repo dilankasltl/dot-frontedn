@@ -3,6 +3,7 @@ import { CheckCircle2, XCircle, Eye, RefreshCw, BarChart3, Users, Clock, Trash2,
 import RequestDetailModal from './RequestDetailModal';
 import AnalyticsCharts from './AnalyticsCharts';
 import AttendanceAuditView from './AttendanceAuditView';
+import DailyHeadcountView from './DailyHeadcountView';
 import { api } from '../api';
 import { playNotificationSound } from '../utils/sound';
 
@@ -208,6 +209,18 @@ export default function RohithaView({ user, isViewerOnly = false }) {
         >
           <FileSpreadsheet className="w-3.5 h-3.5 text-teal-500" />
           <span>Attendance Audit (DOT Reconciliation)</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('daily_headcount')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'daily_headcount'
+              ? 'bg-white dark:bg-slate-700 text-cyan-700 dark:text-cyan-300 shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+          }`}
+        >
+          <Users className="w-3.5 h-3.5 text-cyan-500" />
+          <span>Daily Headcount</span>
         </button>
 
         <button
@@ -529,6 +542,11 @@ export default function RohithaView({ user, isViewerOnly = false }) {
       {/* TAB 4: ATTENDANCE AUDIT & DOT RECONCILIATION */}
       {activeTab === 'attendance_audit' && (
         <AttendanceAuditView user={user} />
+      )}
+
+      {/* TAB 5: DAILY HEADCOUNT & WORKFORCE DEMOGRAPHICS */}
+      {activeTab === 'daily_headcount' && (
+        <DailyHeadcountView user={user} />
       )}
 
       {selectedRequestForModal && (

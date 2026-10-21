@@ -368,5 +368,87 @@ export const api = {
       throw new Error(err.error || 'Failed to add employee record');
     }
     return res.json();
+  },
+
+  // Daily Headcount & Workforce Attendance Analytics APIs
+  saveDailyHeadcount: async (payload) => {
+    const res = await fetch(`${API_BASE}/daily-headcount/save`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to save daily headcount');
+    }
+    return res.json();
+  },
+
+  getDailyHeadcount: async (queryOrDate = {}) => {
+    let params = new URLSearchParams();
+    if (typeof queryOrDate === 'string') {
+      if (queryOrDate) params.append('date', queryOrDate);
+      params.append('mode', 'single');
+    } else if (queryOrDate && typeof queryOrDate === 'object') {
+      if (queryOrDate.mode) params.append('mode', queryOrDate.mode);
+      if (queryOrDate.date) params.append('date', queryOrDate.date);
+      if (queryOrDate.month) params.append('month', queryOrDate.month);
+      if (queryOrDate.startDate) params.append('startDate', queryOrDate.startDate);
+      if (queryOrDate.endDate) params.append('endDate', queryOrDate.endDate);
+    }
+    const res = await fetch(`${API_BASE}/daily-headcount?${params.toString()}`);
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to fetch daily headcount');
+    }
+    return res.json();
+  },
+
+  updateHeadcountRecord: async (reportDate, recordId, updatedFields) => {
+    const res = await fetch(`${API_BASE}/daily-headcount/${encodeURIComponent(reportDate)}/record/${encodeURIComponent(recordId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedFields)
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to update headcount record');
+    }
+    return res.json();
+  },
+
+  deleteHeadcountRecord: async (reportDate, recordId) => {
+    const res = await fetch(`${API_BASE}/daily-headcount/${encodeURIComponent(reportDate)}/record/${encodeURIComponent(recordId)}`, {
+      method: 'DELETE'
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to delete record from headcount');
+    }
+    return res.json();
+  },
+
+  deleteDailyHeadcount: async (reportDate) => {
+    const res = await fetch(`${API_BASE}/daily-headcount/${encodeURIComponent(reportDate)}`, {
+      method: 'DELETE'
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to delete daily headcount');
+    }
+    return res.json();
+  },
+
+  addHeadcountRecord: async (reportDate, recordData) => {
+    const res = await fetch(`${API_BASE}/daily-headcount/${encodeURIComponent(reportDate)}/record`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(recordData)
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to add employee to headcount');
+    }
+    return res.json();
   }
 };

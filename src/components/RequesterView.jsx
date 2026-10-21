@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Send, PlusCircle, Calendar, Clock, CheckCircle, AlertCircle, Eye, RefreshCw, FileText, Trash2, Edit3, Filter, FileSpreadsheet, BarChart3 } from 'lucide-react';
+import { Send, PlusCircle, Calendar, Clock, CheckCircle, AlertCircle, Eye, RefreshCw, FileText, Trash2, Edit3, Filter, FileSpreadsheet, BarChart3, Users } from 'lucide-react';
 import EmployeeSelector from './EmployeeSelector';
 import RequestDetailModal from './RequestDetailModal';
 import AnalyticsCharts from './AnalyticsCharts';
 import AttendanceAuditView from './AttendanceAuditView';
+import DailyHeadcountView from './DailyHeadcountView';
 import { api } from '../api';
 
 export default function RequesterView({ user }) {
@@ -226,17 +227,31 @@ export default function RequesterView({ user }) {
         )}
 
         {(user.canViewAttendance || user.canManageAttendance) && (
-          <button
-            onClick={() => setActiveTab('attendance_audit')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              activeTab === 'attendance_audit'
-                ? 'bg-white dark:bg-slate-700 text-teal-700 dark:text-teal-300 shadow-xs'
-                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
-            }`}
-          >
-            <FileSpreadsheet className="w-4 h-4 text-teal-500" />
-            Attendance Audit
-          </button>
+          <>
+            <button
+              onClick={() => setActiveTab('attendance_audit')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                activeTab === 'attendance_audit'
+                  ? 'bg-white dark:bg-slate-700 text-teal-700 dark:text-teal-300 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+              }`}
+            >
+              <FileSpreadsheet className="w-4 h-4 text-teal-500" />
+              Attendance Audit
+            </button>
+
+            <button
+              onClick={() => setActiveTab('daily_headcount')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                activeTab === 'daily_headcount'
+                  ? 'bg-white dark:bg-slate-700 text-cyan-700 dark:text-cyan-300 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+              }`}
+            >
+              <Users className="w-4 h-4 text-cyan-500" />
+              Daily Headcount
+            </button>
+          </>
         )}
       </div>
 
@@ -571,6 +586,11 @@ export default function RequesterView({ user }) {
       {/* ATTENDANCE AUDIT TAB */}
       {(user.canViewAttendance || user.canManageAttendance) && activeTab === 'attendance_audit' && (
         <AttendanceAuditView user={user} />
+      )}
+
+      {/* DAILY HEADCOUNT TAB */}
+      {(user.canViewAttendance || user.canManageAttendance) && activeTab === 'daily_headcount' && (
+        <DailyHeadcountView user={user} />
       )}
 
       {selectedRequestForModal && (

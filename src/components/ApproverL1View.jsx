@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { CheckCircle2, XCircle, Eye, RefreshCw, CheckCheck, XSquare, Building2, AlertCircle, BarChart3, Trash2, Calendar, FileSpreadsheet, Bell, Clock } from 'lucide-react';
+import { CheckCircle2, XCircle, Eye, RefreshCw, CheckCheck, XSquare, Building2, AlertCircle, BarChart3, Trash2, Calendar, FileSpreadsheet, Bell, Clock, Users } from 'lucide-react';
 import RequestDetailModal from './RequestDetailModal';
 import AnalyticsCharts from './AnalyticsCharts';
 import AttendanceAuditView from './AttendanceAuditView';
+import DailyHeadcountView from './DailyHeadcountView';
 import { api } from '../api';
 import { playNotificationSound } from '../utils/sound';
 
@@ -268,17 +269,31 @@ export default function ApproverL1View({ user }) {
           </button>
 
           {canViewAttendance && (
-            <button
-              onClick={() => setActiveTab('attendance_audit')}
-              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeTab === 'attendance_audit'
-                  ? 'bg-white dark:bg-slate-700 text-teal-700 dark:text-teal-300 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-              }`}
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-teal-500" />
-              <span>Attendance Audit (DOT Reconciliation)</span>
-            </button>
+            <>
+              <button
+                onClick={() => setActiveTab('attendance_audit')}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  activeTab === 'attendance_audit'
+                    ? 'bg-white dark:bg-slate-700 text-teal-700 dark:text-teal-300 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                }`}
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-teal-500" />
+                <span>Attendance Audit (DOT Reconciliation)</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('daily_headcount')}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  activeTab === 'daily_headcount'
+                    ? 'bg-white dark:bg-slate-700 text-cyan-700 dark:text-cyan-300 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5 text-cyan-500" />
+                <span>Daily Headcount</span>
+              </button>
+            </>
           )}
         </div>
 
@@ -655,6 +670,11 @@ export default function ApproverL1View({ user }) {
       {/* TAB 5: ATTENDANCE AUDIT & DOT RECONCILIATION */}
       {canViewAttendance && activeTab === 'attendance_audit' && (
         <AttendanceAuditView user={user} />
+      )}
+
+      {/* TAB 6: DAILY HEADCOUNT & WORKFORCE DEMOGRAPHICS */}
+      {canViewAttendance && activeTab === 'daily_headcount' && (
+        <DailyHeadcountView user={user} />
       )}
 
       {selectedRequestForModal && (

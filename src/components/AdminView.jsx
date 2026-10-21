@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import AnalyticsCharts from './AnalyticsCharts';
 import AttendanceAuditView from './AttendanceAuditView';
+import DailyHeadcountView from './DailyHeadcountView';
 import { api } from '../api';
 
 export default function AdminView({ user, onUserUpdated }) {
@@ -610,6 +611,18 @@ export default function AdminView({ user, onUserUpdated }) {
             <FileSpreadsheet className="w-4 h-4 text-teal-500" />
             <span>Attendance Audit (DOT Reconciliation)</span>
           </button>
+
+          <button
+            onClick={() => setActiveTab('daily_headcount')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'daily_headcount'
+                ? 'bg-white dark:bg-slate-700 text-cyan-700 dark:text-cyan-300 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+            }`}
+          >
+            <Users className="w-4 h-4 text-cyan-500" />
+            <span>Daily Headcount</span>
+          </button>
         </div>
 
         {/* Header Action Buttons per Tab */}
@@ -1116,6 +1129,11 @@ export default function AdminView({ user, onUserUpdated }) {
       {/* TAB 5: ATTENDANCE AUDIT & DOT RECONCILIATION */}
       {activeTab === 'attendance_audit' && (
         <AttendanceAuditView user={user} />
+      )}
+
+      {/* TAB 6: DAILY HEADCOUNT & WORKFORCE DEMOGRAPHICS */}
+      {activeTab === 'daily_headcount' && (
+        <DailyHeadcountView user={user} />
       )}
 
       {/* ADD EMPLOYEE MODAL (EPF No + Full Name) */}

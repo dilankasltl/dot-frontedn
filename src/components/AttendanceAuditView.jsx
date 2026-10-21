@@ -248,11 +248,14 @@ export default function AttendanceAuditView({ user }) {
               if (colName === 'unit') colMap.unit = colIdx;
               if (colName === 'number' || colName === 'epf no' || colName === 'epf') colMap.number = colIdx;
               if (colName === 'full name' || colName === 'name') colMap.fullName = colIdx;
+              if (colName === 'gender') colMap.gender = colIdx;
               if (colName === 'shift name' || colName === 'shift') colMap.shiftName = colIdx;
               if (colName === 'present') colMap.present = colIdx;
+              if (colName === 'leave') colMap.leave = colIdx;
               if (colName === 'first date' || colName === 'date') colMap.firstDate = colIdx;
               if (colName === 'in time') colMap.inTime = colIdx;
               if (colName === 'out time') colMap.outTime = colIdx;
+              if (colName === 'late') colMap.late = colIdx;
               if (colName === 'work hrs' || colName === 'work hours' || colName === 'work hour') colMap.workHrs = colIdx;
             });
             break;
@@ -267,6 +270,7 @@ export default function AttendanceAuditView({ user }) {
         //    A) Double OT: Shift Name === 'off' AND Present === 'yes'
         //    B) 24 Hours Duty: Work Hrs >= 19
         const extractedDotRecords = [];
+        const allHeadcountRecords = [];
         let totalCount = 0;
         let fallbackDate = extractedDateStr;
 
@@ -293,15 +297,37 @@ export default function AttendanceAuditView({ user }) {
           totalCount++;
 
           const rawFullName = colMap.fullName !== undefined ? String(row[colMap.fullName] || '').trim() : '';
+          const gender = colMap.gender !== undefined ? String(row[colMap.gender] || 'MALE').trim().toUpperCase() : 'MALE';
           const shiftName = colMap.shiftName !== undefined ? String(row[colMap.shiftName] || '').trim() : '';
           const present = colMap.present !== undefined ? String(row[colMap.present] || '').trim() : 'Yes';
+          const leave = colMap.leave !== undefined ? String(row[colMap.leave] || '').trim() : 'No';
           const firstDate = colMap.firstDate !== undefined ? String(row[colMap.firstDate] || '').trim() : extractedDateStr;
           const workHrsRaw = colMap.workHrs !== undefined ? row[colMap.workHrs] : 0;
           const workHrs = parseFloat(String(workHrsRaw).replace(',', '.')) || 0;
           const inTime = colMap.inTime !== undefined ? String(row[colMap.inTime] || '').trim() : '';
           const outTime = colMap.outTime !== undefined ? String(row[colMap.outTime] || '').trim() : '';
+          const late = colMap.late !== undefined ? String(row[colMap.late] || '00:00').trim() : '00:00';
 
           if (firstDate && !fallbackDate) fallbackDate = firstDate;
+
+          // Collect for Daily Headcount (excluding 00001)
+          if (rawNum !== '00001' && rawNum !== '1' && !rawNum.endsWith('00001')) {
+            allHeadcountRecords.push({
+              epfNo: rawNum,
+              fullName: rawFullName,
+              department: currentDept,
+              unit: currentUnit,
+              gender: gender.includes('FEMALE') ? 'FEMALE' : 'MALE',
+              shiftName: shiftName || 'General GE',
+              present: present || 'Yes',
+              leave: leave || 'No',
+              firstDate: firstDate || fallbackDate,
+              inTime: inTime,
+              outTime: outTime,
+              late: late,
+              workHrs: workHrs
+            });
+          }
 
           const isPresentYes = String(present || '').trim().toLowerCase() === 'yes';
           const isOffShift = shiftName.toLowerCase() === 'off' || shiftName.toLowerCase().includes('off');
@@ -366,6 +392,20 @@ export default function AttendanceAuditView({ user }) {
         };
 
         const res = await api.saveAttendanceAudit(payload);
+
+        // Also sync Daily Headcount in background if full employee records exist
+        if (allHeadcountRecords.length > 0) {
+          try {
+            await api.saveDailyHeadcount({
+              reportDate: effectiveReportDate,
+              rawDateStr: fallbackDate,
+              uploadedBy: user.name || user.username,
+              records: allHeadcountRecords
+            });
+          } catch (headcountSyncErr) {
+            console.warn('Headcount sync in background notice:', headcountSyncErr);
+          }
+        }
 
         setMessage({
           type: 'success',
