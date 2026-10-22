@@ -1,12 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { X, Clock, Download, Search, Edit3, PlusCircle, Users, Calendar, AlertTriangle } from 'lucide-react';
+import { X, Clock, Download, Search, Edit3, PlusCircle, Calendar } from 'lucide-react';
 import * as XLSX from 'xlsx';
-
-const isLeaveVal = (val) => {
-  if (!val) return false;
-  const s = String(val).trim().toLowerCase();
-  return s !== '' && s !== 'no' && s !== 'none' && s !== '-';
-};
 
 // Drilldown Modal 1: LEAVE != 'NO' Employees (Supports Single, Month-Wise & Date-Range with Grouped Employee Counts)
 export function LeaveDrilldownModal({
@@ -22,8 +16,6 @@ export function LeaveDrilldownModal({
 }) {
   const [search, setSearch] = useState('');
   const [viewMode, setViewMode] = useState('grouped'); // 'grouped' | 'detailed'
-
-  if (!isOpen) return null;
 
   const isMultiDay = filterMode === 'month' || filterMode === 'range';
 
@@ -136,6 +128,8 @@ export function LeaveDrilldownModal({
     XLSX.utils.book_append_sheet(wb, ws, 'Leave_Employees');
     XLSX.writeFile(wb, `${exportFileName}.xlsx`);
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
@@ -370,12 +364,10 @@ export function LateDrilldownModal({
   startDate = '',
   endDate = '',
   formatMonthName,
-  parseMinutes = (t) => 0
+  parseMinutes = () => 0
 }) {
   const [search, setSearch] = useState('');
   const [viewMode, setViewMode] = useState('grouped'); // 'grouped' | 'detailed'
-
-  if (!isOpen) return null;
 
   const isMultiDay = filterMode === 'month' || filterMode === 'range';
 
@@ -497,6 +489,8 @@ export function LateDrilldownModal({
     XLSX.utils.book_append_sheet(wb, ws, 'Late_Employees');
     XLSX.writeFile(wb, `${exportFileName}.xlsx`);
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
@@ -728,7 +722,7 @@ export function EditRecordModal({ record, onClose, onSave }) {
   const [inTime, setInTime] = useState(record?.inTime || '');
   const [outTime, setOutTime] = useState(record?.outTime || '');
   const [late, setLate] = useState(record?.late || '00:00');
-  const [workHrs, setWorkHrs] = useState(record?.workHrs || 8);
+  const [workHrs] = useState(record?.workHrs || 8);
 
   if (!record) return null;
 

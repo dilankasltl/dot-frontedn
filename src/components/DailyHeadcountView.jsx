@@ -967,30 +967,34 @@ export default function DailyHeadcountView({ user }) {
       />
 
       {/* MODALS */}
-      <LeaveDrilldownModal
-        isOpen={drilldownModal === 'leave'}
-        onClose={() => setDrilldownModal(null)}
-        records={allRecords.filter(r => isLeaveVal(r.leave) && r.epfNo !== '00001' && r.epfNo !== '1')}
-        selectedDate={selectedDate}
-        filterMode={filterMode}
-        selectedMonth={selectedMonth}
-        startDate={startDate}
-        endDate={endDate}
-        formatMonthName={formatMonthName}
-      />
+      {drilldownModal === 'leave' && (
+        <LeaveDrilldownModal
+          isOpen={true}
+          onClose={() => setDrilldownModal(null)}
+          records={allRecords.filter(r => isLeaveVal(r.leave) && r.epfNo !== '00001' && r.epfNo !== '1')}
+          selectedDate={selectedDate}
+          filterMode={filterMode}
+          selectedMonth={selectedMonth}
+          startDate={startDate}
+          endDate={endDate}
+          formatMonthName={formatMonthName}
+        />
+      )}
 
-      <LateDrilldownModal
-        isOpen={drilldownModal === 'late'}
-        onClose={() => setDrilldownModal(null)}
-        records={allRecords.filter(r => (r.isLateOver15 || parseMinutes(r.late) > 15) && r.epfNo !== '00001' && r.epfNo !== '1')}
-        selectedDate={selectedDate}
-        filterMode={filterMode}
-        selectedMonth={selectedMonth}
-        startDate={startDate}
-        endDate={endDate}
-        formatMonthName={formatMonthName}
-        parseMinutes={parseMinutes}
-      />
+      {drilldownModal === 'late' && (
+        <LateDrilldownModal
+          isOpen={true}
+          onClose={() => setDrilldownModal(null)}
+          records={allRecords.filter(r => (r.isLateOver15 || parseMinutes(r.late) > 15) && r.epfNo !== '00001' && r.epfNo !== '1')}
+          selectedDate={selectedDate}
+          filterMode={filterMode}
+          selectedMonth={selectedMonth}
+          startDate={startDate}
+          endDate={endDate}
+          formatMonthName={formatMonthName}
+          parseMinutes={parseMinutes}
+        />
+      )}
 
       <EditRecordModal
         record={editingRecord}
