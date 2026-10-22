@@ -125,7 +125,8 @@ export function DailyHeadcountTable({
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
               {records.map((r, idx) => {
                 const isPresentYes = String(r.present).toLowerCase() === 'yes';
-                const isLeaveYes = String(r.leave).toLowerCase() === 'yes';
+                const lVal = String(r.leave || '').trim().toLowerCase();
+                const isLeaveYes = lVal !== '' && lVal !== 'no' && lVal !== 'none' && lVal !== '-';
                 const isLateOver = r.isLateOver15 || parseMinutes(r.late) > 15;
 
                 return (

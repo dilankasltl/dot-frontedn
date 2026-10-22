@@ -87,6 +87,12 @@ export default function DailyHeadcountView({ user }) {
     return 0;
   };
 
+  const isLeaveVal = (val) => {
+    if (!val) return false;
+    const s = String(val).trim().toLowerCase();
+    return s !== '' && s !== 'no' && s !== 'none' && s !== '-';
+  };
+
   const loadHeadcountData = async (paramOverrides = {}) => {
     setLoading(true);
     setMessage(null);
@@ -246,7 +252,7 @@ export default function DailyHeadcountView({ user }) {
     if (genderFilter !== 'ALL' && String(r.gender).toUpperCase() !== genderFilter) return false;
     if (statusFilter === 'PRESENT' && String(r.present).toLowerCase() !== 'yes') return false;
     if (statusFilter === 'ABSENT' && String(r.present).toLowerCase() === 'yes') return false;
-    if (statusFilter === 'LEAVE' && String(r.leave).toLowerCase() !== 'yes') return false;
+    if (statusFilter === 'LEAVE' && !isLeaveVal(r.leave)) return false;
     if (statusFilter === 'LATE' && !r.isLateOver15 && parseMinutes(r.late) <= 15) return false;
 
     if (deptFilter !== 'ALL' && (r.department || 'General') !== deptFilter) return false;
@@ -279,8 +285,23 @@ export default function DailyHeadcountView({ user }) {
   const femaleCount = headcountData?.femaleCount || 0;
   const presentCount = headcountData?.presentCount || 0;
   const absentCount = headcountData?.absentCount || 0;
-  const leaveCount = headcountData?.leaveCount || 0;
-  const lateOver15Count = headcountData?.lateOver15Count || 0;
+
+  // Accurately compute leave and late counts using LEAVE != 'NO' and late > 15m
+  const leaveCount = allRecords.length > 0
+    ? allRecords.filter(r => isLeaveVal(r.leave) && r.epfNo !== '00001' && r.epfNo !== '1').length
+    : (headcountData?.leaveCount || 0);
+
+  const lateOver15Count = allRecords.length > 0
+    ? allRecords.filter(r => (r.isLateOver15 || parseMinutes(r.late) > 15) && r.epfNo !== '00001' && r.epfNo !== '1').length
+    : (headcountData?.lateOver15Count || 0);
+
+  const uniqueLeaveEmpCount = new Set(
+    allRecords.filter(r => isLeaveVal(r.leave) && r.epfNo !== '00001' && r.epfNo !== '1').map(r => r.epfNo)
+  ).size;
+
+  const uniqueLateEmpCount = new Set(
+    allRecords.filter(r => (r.isLateOver15 || parseMinutes(r.late) > 15) && r.epfNo !== '00001' && r.epfNo !== '1').map(r => r.epfNo)
+  ).size;
 
   const attendanceBarData = [
     { category: 'Present', count: presentCount, fill: '#10b981' },
@@ -631,7 +652,7 @@ export default function DailyHeadcountView({ user }) {
           </span>
         </div>
 
-        {/* Card 4: Leave = 'Yes' (CLICKABLE DRILLDOWN) */}
+        {/* Card 4: LEAVE != 'NO' (CLICKABLE DRILLDOWN) */}
         <div
           onClick={() => setDrilldownModal('leave')}
           className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-amber-300 dark:border-amber-800/80 p-4 shadow-xs bg-amber-50/30 dark:bg-amber-950/20 flex items-center justify-between cursor-pointer hover:border-amber-500 dark:hover:border-amber-600 hover:shadow-md transition-all active:scale-98 group"
@@ -640,13 +661,13 @@ export default function DailyHeadcountView({ user }) {
           <div>
             <p className="text-xs font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1">
               <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-              <span>LEAVE = 'YES'</span>
+              <span>LEAVE != 'NO'</span>
             </p>
             <h3 className="text-3xl font-black text-amber-900 dark:text-amber-100 mt-1">
               {leaveCount}
             </h3>
             <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5 font-bold flex items-center gap-0.5 group-hover:underline">
-              <span>View Employee List</span>
+              <span>{filterMode !== 'single' && uniqueLeaveEmpCount > 0 ? `${uniqueLeaveEmpCount} Employees • View List` : 'View Employee List'}</span>
               <ChevronRight className="w-3 h-3" />
             </p>
           </div>
@@ -670,7 +691,7 @@ export default function DailyHeadcountView({ user }) {
               {lateOver15Count}
             </h3>
             <p className="text-[11px] text-rose-700 dark:text-rose-400 mt-0.5 font-bold flex items-center gap-0.5 group-hover:underline">
-              <span>View Employee List</span>
+              <span>{filterMode !== 'single' && uniqueLateEmpCount > 0 ? `${uniqueLateEmpCount} Employees • View List` : 'View Employee List'}</span>
               <ChevronRight className="w-3 h-3" />
             </p>
           </div>
@@ -770,7 +791,7 @@ export default function DailyHeadcountView({ user }) {
                 <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
                 <Bar dataKey="headcount" name="Headcount" fill="#06b6d4" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="present" name="Present" fill="#10b981" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="leave" name="Leave = Yes" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="leave" name="Leave != 'No'" fill="#f59e0b" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="lateOver15" name="Late > 15m" fill="#f43f5e" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -821,7 +842,7 @@ export default function DailyHeadcountView({ user }) {
                   : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 hover:bg-amber-100'
               }`}
             >
-              Leave ({leaveCount})
+              Leave != 'No' ({leaveCount})
             </button>
             <button
               onClick={() => setStatusFilter('LATE')}
@@ -949,8 +970,13 @@ export default function DailyHeadcountView({ user }) {
       <LeaveDrilldownModal
         isOpen={drilldownModal === 'leave'}
         onClose={() => setDrilldownModal(null)}
-        records={allRecords.filter(r => String(r.leave).toLowerCase() === 'yes' && r.epfNo !== '00001' && r.epfNo !== '1')}
+        records={allRecords.filter(r => isLeaveVal(r.leave) && r.epfNo !== '00001' && r.epfNo !== '1')}
         selectedDate={selectedDate}
+        filterMode={filterMode}
+        selectedMonth={selectedMonth}
+        startDate={startDate}
+        endDate={endDate}
+        formatMonthName={formatMonthName}
       />
 
       <LateDrilldownModal
@@ -958,6 +984,11 @@ export default function DailyHeadcountView({ user }) {
         onClose={() => setDrilldownModal(null)}
         records={allRecords.filter(r => (r.isLateOver15 || parseMinutes(r.late) > 15) && r.epfNo !== '00001' && r.epfNo !== '1')}
         selectedDate={selectedDate}
+        filterMode={filterMode}
+        selectedMonth={selectedMonth}
+        startDate={startDate}
+        endDate={endDate}
+        formatMonthName={formatMonthName}
         parseMinutes={parseMinutes}
       />
 
