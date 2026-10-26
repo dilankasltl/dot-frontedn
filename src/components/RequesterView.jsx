@@ -14,8 +14,8 @@ export default function RequesterView({ user }) {
   const todayStr = new Date().toISOString().split('T')[0];
   const [selectedEmployees, setSelectedEmployees] = useState([]);
   const [date, setDate] = useState(todayStr);
-  const [shift, setShift] = useState('SHIFT A');
-  const [hours, setHours] = useState(4);
+  const [shift, setShift] = useState('Shift A');
+  const [hours, setHours] = useState(0);
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(null);
@@ -97,8 +97,8 @@ export default function RequesterView({ user }) {
       setSelectedEmployees([]);
       setReason('');
       setDate(todayStr);
-      setShift('SHIFT A');
-      setHours(4);
+      setShift('Shift A');
+      setHours(0);
       fetchMyRequests();
     } catch (err) {
       setMessage({ type: 'error', text: err.message || 'Failed to submit request.' });
@@ -110,8 +110,8 @@ export default function RequesterView({ user }) {
   const handleStartEdit = (req) => {
     setEditingRequestId(req._id);
     setDate(req.date);
-    setShift(req.shift || 'SHIFT A');
-    setHours(req.hours);
+    setShift(req.shift || 'Shift A');
+    setHours(req.hours ?? 0);
     setReason(req.reason);
     setSelectedEmployees(req.employees || []);
     setActiveTab('new');
@@ -123,8 +123,8 @@ export default function RequesterView({ user }) {
     setSelectedEmployees([]);
     setReason('');
     setDate(todayStr);
-    setShift('SHIFT A');
-    setHours(4);
+    setShift('Shift A');
+    setHours(0);
   };
 
   const handleDelete = async (id) => {
@@ -321,11 +321,12 @@ export default function RequesterView({ user }) {
                 <select
                   value={shift}
                   onChange={(e) => setShift(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800"
+                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 cursor-pointer"
                 >
-                  <option value="SHIFT A">SHIFT A</option>
-                  <option value="SHIFT B">SHIFT B</option>
-                  <option value="SHIFT C">SHIFT C</option>
+                  <option value="Shift A">Shift A</option>
+                  <option value="Shift B">Shift B</option>
+                  <option value="Shift C">Shift C</option>
+                  <option value="General">General</option>
                 </select>
               </div>
 
@@ -335,7 +336,7 @@ export default function RequesterView({ user }) {
                 </label>
                 <input
                   type="number"
-                  min="1"
+                  min="0"
                   max="24"
                   step="0.5"
                   required
