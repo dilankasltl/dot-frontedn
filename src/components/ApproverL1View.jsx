@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { CheckCircle2, XCircle, Eye, RefreshCw, CheckCheck, XSquare, Building2, AlertCircle, BarChart3, Trash2, Calendar, FileSpreadsheet, Bell, Clock, Users } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { CheckCircle2, XCircle, Eye, RefreshCw, CheckCheck, XSquare, Building2, AlertCircle, BarChart3, Trash2, Calendar, FileSpreadsheet, Bell, Clock, Users, Search, Filter } from 'lucide-react';
 import RequestDetailModal from './RequestDetailModal';
 import AnalyticsCharts from './AnalyticsCharts';
 import AttendanceAuditView from './AttendanceAuditView';
@@ -15,6 +15,8 @@ export default function ApproverL1View({ user }) {
   const [selectedIds, setSelectedIds] = useState([]);
   const [activeTab, setActiveTab] = useState('pending'); // 'pending' | 'company_monitor' | 'history' | 'charts'
   const [selectedDeptFilter, setSelectedDeptFilter] = useState('ALL');
+  const [selectedReasonFilter, setSelectedReasonFilter] = useState('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedRequestForModal, setSelectedRequestForModal] = useState(null);
   const [actionInProgress, setActionInProgress] = useState(false);
   const [message, setMessage] = useState(null);
@@ -132,13 +134,44 @@ export default function ApproverL1View({ user }) {
     }
   };
 
+  // Unique list of reasons extracted from requests
+  const availableReasons = useMemo(() => {
+    const map = new Map();
+    [...requests, ...allPending, ...actionable].forEach((r) => {
+      const trimmed = r?.reason?.trim();
+      if (trimmed) {
+        const key = trimmed.toLowerCase();
+        if (!map.has(key)) {
+          map.set(key, trimmed);
+        }
+      }
+    });
+    return Array.from(map.values()).sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: 'base' })
+    );
+  }, [requests, allPending, actionable]);
+
   const filterItems = (list) => {
-    if (selectedDeptFilter === 'ALL') return list;
-    return list.filter((r) => r.department === selectedDeptFilter);
+    return list.filter((r) => {
+      const matchDept = selectedDeptFilter === 'ALL' || r.department === selectedDeptFilter;
+      const matchReason =
+        selectedReasonFilter === 'ALL' ||
+        (r.reason && r.reason.trim().toLowerCase() === selectedReasonFilter.toLowerCase());
+      const q = searchQuery.trim().toLowerCase();
+      const matchSearch =
+        !q ||
+        r.reqNumber?.toLowerCase().includes(q) ||
+        r.requesterName?.toLowerCase().includes(q) ||
+        r.department?.toLowerCase().includes(q) ||
+        r.shift?.toLowerCase().includes(q) ||
+        r.reason?.toLowerCase().includes(q);
+      return matchDept && matchReason && matchSearch;
+    });
   };
 
   const pendingList = filterItems(actionable);
   const historyList = filterItems(requests.filter((r) => r.status !== 'PENDING_L1'));
+  const monitorList = filterItems(monitorDateMode === 'today' ? allPending.filter((r) => r.date === todayStr) : allPending);
 
   return (
     <div className="space-y-6">
@@ -297,22 +330,64 @@ export default function ApproverL1View({ user }) {
           )}
         </div>
 
-        {/* Multi-department filter */}
-        {user.approvedDepartments?.length > 1 && activeTab !== 'charts' && activeTab !== 'attendance_audit' && activeTab !== 'epf_summary' && (
-          <div className="flex items-center gap-2 text-xs">
-            <span className="text-slate-500 dark:text-slate-400 font-medium">Department:</span>
+        {/* Filters: Search, Department & Reason / Justification */}
+        {activeTab !== 'charts' && activeTab !== 'attendance_audit' && activeTab !== 'epf_summary' && activeTab !== 'daily_headcount' && (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            {/* Search */}
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-7 pr-2.5 py-1.5 border border-slate-300 dark:border-slate-700 rounded-xl text-xs bg-white dark:bg-slate-800 text-slate-800 dark:text-white w-32 sm:w-40 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+              />
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2 top-2.5" />
+            </div>
+
+            {/* Department Filter */}
+            {user.approvedDepartments?.length > 1 && (
+              <select
+                value={selectedDeptFilter}
+                onChange={(e) => setSelectedDeptFilter(e.target.value)}
+                className="px-2.5 py-1.5 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-white bg-white dark:bg-slate-800 cursor-pointer"
+              >
+                <option value="ALL">All Depts ({user.approvedDepartments.length})</option>
+                {user.approvedDepartments.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {/* Reason / Justification Filter */}
             <select
-              value={selectedDeptFilter}
-              onChange={(e) => setSelectedDeptFilter(e.target.value)}
-              className="px-3 py-1.5 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-white bg-white dark:bg-slate-800"
+              value={selectedReasonFilter}
+              onChange={(e) => setSelectedReasonFilter(e.target.value)}
+              className="px-2.5 py-1.5 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-white bg-white dark:bg-slate-800 cursor-pointer max-w-[190px] truncate"
+              title="Filter by Reason / Justification"
             >
-              <option value="ALL">All Departments ({user.approvedDepartments.length})</option>
-              {user.approvedDepartments.map((d) => (
-                <option key={d} value={d}>
-                  {d}
+              <option value="ALL">All Reasons ({availableReasons.length})</option>
+              {availableReasons.map((resn) => (
+                <option key={resn} value={resn}>
+                  {resn}
                 </option>
               ))}
             </select>
+
+            {(selectedDeptFilter !== 'ALL' || selectedReasonFilter !== 'ALL' || searchQuery) && (
+              <button
+                onClick={() => {
+                  setSelectedDeptFilter('ALL');
+                  setSelectedReasonFilter('ALL');
+                  setSearchQuery('');
+                }}
+                className="text-[11px] font-bold text-rose-600 dark:text-rose-400 hover:underline cursor-pointer"
+              >
+                Reset
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -509,6 +584,7 @@ export default function ApproverL1View({ user }) {
                     <th className="py-3 px-4">Date</th>
                     <th className="py-3 px-4">Shift</th>
                     <th className="py-3 px-4">Headcount</th>
+                    <th className="py-3 px-4">Reason</th>
                     <th className="py-3 px-4">Workflow Status</th>
                     <th className="py-3 px-4 text-right">Details</th>
                   </tr>
@@ -522,6 +598,9 @@ export default function ApproverL1View({ user }) {
                       <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{req.date}</td>
                       <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{req.shift}</td>
                       <td className="py-3 px-4 font-semibold text-slate-800 dark:text-slate-200">{req.employeeCount} Persons</td>
+                      <td className="py-3 px-4 text-slate-600 dark:text-slate-400 max-w-xs truncate" title={req.reason}>
+                        {req.reason || '-'}
+                      </td>
                       <td className="py-3 px-4">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                           req.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
@@ -579,7 +658,7 @@ export default function ApproverL1View({ user }) {
           </div>
 
           <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs overflow-hidden transition-colors">
-            {(monitorDateMode === 'today' ? allPending.filter((r) => r.date === todayStr) : allPending).length === 0 ? (
+            {monitorList.length === 0 ? (
               <div className="p-8 text-center text-xs text-slate-500">
                 No requests currently pending across the company.
               </div>
@@ -595,12 +674,13 @@ export default function ApproverL1View({ user }) {
                       <th className="py-3 px-4">Shift</th>
                       <th className="py-3 px-4">Hours</th>
                       <th className="py-3 px-4">Headcount</th>
+                      <th className="py-3 px-4">Reason</th>
                       <th className="py-3 px-4">Approval Stage</th>
                       <th className="py-3 px-4 text-right">View</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
-                    {(monitorDateMode === 'today' ? allPending.filter((r) => r.date === todayStr) : allPending).map((req) => (
+                    {monitorList.map((req) => (
                       <tr key={req._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                         <td className="py-3 px-4 font-mono font-bold text-blue-700 dark:text-blue-400">{req.reqNumber}</td>
                         <td className="py-3 px-4">
@@ -619,6 +699,9 @@ export default function ApproverL1View({ user }) {
                           >
                             {req.employeeCount || req.employees?.length} Persons
                           </button>
+                        </td>
+                        <td className="py-3 px-4 text-slate-600 dark:text-slate-400 max-w-xs truncate" title={req.reason}>
+                          {req.reason || '-'}
                         </td>
                         <td className="py-3 px-4">
                           {req.status === 'PENDING_L1' ? (

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ShieldCheck, CheckCheck, XSquare, Eye, RefreshCw, BarChart3, ListFilter, CheckCircle2, XCircle, Search, Clock, Trash2, FileSpreadsheet, Bell, Users } from 'lucide-react';
 import RequestDetailModal from './RequestDetailModal';
 import AnalyticsCharts from './AnalyticsCharts';
@@ -29,6 +29,7 @@ export default function VinodView({ user }) {
   const [loading, setLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [selectedDept, setSelectedDept] = useState('ALL');
+  const [selectedReason, setSelectedReason] = useState('ALL');
   const [searchFilter, setSearchFilter] = useState('');
   const [selectedRequestForModal, setSelectedRequestForModal] = useState(null);
   const [actionInProgress, setActionInProgress] = useState(false);
@@ -171,26 +172,55 @@ export default function VinodView({ user }) {
     );
   };
 
-  // Filter actionable by dept & search
+  // Unique list of reasons extracted dynamically from requests
+  const availableReasons = useMemo(() => {
+    const map = new Map();
+    [...requests, ...actionable].forEach((r) => {
+      const trimmed = r?.reason?.trim();
+      if (trimmed) {
+        const key = trimmed.toLowerCase();
+        if (!map.has(key)) {
+          map.set(key, trimmed);
+        }
+      }
+    });
+    return Array.from(map.values()).sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: 'base' })
+    );
+  }, [requests, actionable]);
+
+  // Filter actionable by dept, reason & search
   const filteredActionable = actionable.filter((req) => {
     const matchDept = selectedDept === 'ALL' || req.department === selectedDept;
+    const matchReason =
+      selectedReason === 'ALL' ||
+      (req.reason && req.reason.trim().toLowerCase() === selectedReason.toLowerCase());
+    const q = searchFilter.trim().toLowerCase();
     const matchSearch =
-      !searchFilter ||
-      req.reqNumber.toLowerCase().includes(searchFilter.toLowerCase()) ||
-      req.requesterName.toLowerCase().includes(searchFilter.toLowerCase()) ||
-      req.department.toLowerCase().includes(searchFilter.toLowerCase());
-    return matchDept && matchSearch;
+      !q ||
+      req.reqNumber?.toLowerCase().includes(q) ||
+      req.requesterName?.toLowerCase().includes(q) ||
+      req.department?.toLowerCase().includes(q) ||
+      req.shift?.toLowerCase().includes(q) ||
+      req.reason?.toLowerCase().includes(q);
+    return matchDept && matchReason && matchSearch;
   });
 
   // Filter all requests archive
   const filteredArchive = requests.filter((req) => {
     const matchDept = selectedDept === 'ALL' || req.department === selectedDept;
+    const matchReason =
+      selectedReason === 'ALL' ||
+      (req.reason && req.reason.trim().toLowerCase() === selectedReason.toLowerCase());
+    const q = searchFilter.trim().toLowerCase();
     const matchSearch =
-      !searchFilter ||
-      req.reqNumber.toLowerCase().includes(searchFilter.toLowerCase()) ||
-      req.requesterName.toLowerCase().includes(searchFilter.toLowerCase()) ||
-      req.department.toLowerCase().includes(searchFilter.toLowerCase());
-    return matchDept && matchSearch;
+      !q ||
+      req.reqNumber?.toLowerCase().includes(q) ||
+      req.requesterName?.toLowerCase().includes(q) ||
+      req.department?.toLowerCase().includes(q) ||
+      req.shift?.toLowerCase().includes(q) ||
+      req.reason?.toLowerCase().includes(q);
+    return matchDept && matchReason && matchSearch;
   });
 
   return (
@@ -340,7 +370,7 @@ export default function VinodView({ user }) {
             <div className="relative w-full sm:w-64">
               <input
                 type="text"
-                placeholder="Search Req No / Requester..."
+                placeholder="Search Req No / Requester / Reason..."
                 value={searchFilter}
                 onChange={(e) => setSearchFilter(e.target.value)}
                 className="w-full pl-8 pr-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-white bg-white dark:bg-slate-800 focus:outline-hidden focus:ring-1 focus:ring-purple-500"
@@ -366,6 +396,40 @@ export default function VinodView({ user }) {
                 </button>
               );
             })}
+          </div>
+
+          {/* Reason / Justification Filter */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                Reason / Justification:
+              </span>
+              <select
+                value={selectedReason}
+                onChange={(e) => setSelectedReason(e.target.value)}
+                className="px-3 py-1.5 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-white bg-white dark:bg-slate-800 cursor-pointer max-w-[240px] truncate"
+              >
+                <option value="ALL">All Reasons ({availableReasons.length})</option>
+                {availableReasons.map((resn) => (
+                  <option key={resn} value={resn}>
+                    {resn}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {(selectedDept !== 'ALL' || selectedReason !== 'ALL' || searchFilter) && (
+              <button
+                onClick={() => {
+                  setSelectedDept('ALL');
+                  setSelectedReason('ALL');
+                  setSearchFilter('');
+                }}
+                className="text-xs text-rose-600 dark:text-rose-400 hover:underline font-bold cursor-pointer"
+              >
+                Reset All Filters
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -574,6 +638,7 @@ export default function VinodView({ user }) {
                     <th className="py-3 px-4">Date</th>
                     <th className="py-3 px-4">Shift</th>
                     <th className="py-3 px-4">Headcount</th>
+                    <th className="py-3 px-4">Reason</th>
                     <th className="py-3 px-4">Status</th>
                     <th className="py-3 px-4 text-right">Details</th>
                   </tr>
@@ -587,6 +652,9 @@ export default function VinodView({ user }) {
                       <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{req.date}</td>
                       <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{req.shift}</td>
                       <td className="py-3 px-4 font-semibold text-slate-800 dark:text-slate-200">{req.employeeCount} Persons</td>
+                      <td className="py-3 px-4 text-slate-600 dark:text-slate-400 max-w-xs truncate" title={req.reason}>
+                        {req.reason || '-'}
+                      </td>
                       <td className="py-3 px-4">
                         {getStatusBadgeVinod(req)}
                       </td>

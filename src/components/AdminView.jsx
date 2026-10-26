@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Shield,
   Users,
@@ -95,6 +95,7 @@ export default function AdminView({ user, onUserUpdated }) {
   const [dataDeptFilter, setDataDeptFilter] = useState('ALL');
   const [dataUserFilter, setDataUserFilter] = useState('ALL');
   const [dataStatusFilter, setDataStatusFilter] = useState('ALL');
+  const [dataReasonFilter, setDataReasonFilter] = useState('ALL');
   const [dataSearch, setDataSearch] = useState('');
 
   const fetchUsers = async () => {
@@ -481,18 +482,41 @@ export default function AdminView({ user, onUserUpdated }) {
     return matchesSearch && matchesRole;
   });
 
+  // Unique list of reasons extracted dynamically from requestsList
+  const availableReasons = useMemo(() => {
+    const map = new Map();
+    requestsList.forEach((r) => {
+      const trimmed = r?.reason?.trim();
+      if (trimmed) {
+        const key = trimmed.toLowerCase();
+        if (!map.has(key)) {
+          map.set(key, trimmed);
+        }
+      }
+    });
+    return Array.from(map.values()).sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: 'base' })
+    );
+  }, [requestsList]);
+
   // Filtered Requests
   const filteredRequests = requestsList.filter((r) => {
     const matchesDept = dataDeptFilter === 'ALL' || r.department === dataDeptFilter;
     const matchesUser = dataUserFilter === 'ALL' || r.requesterUsername === dataUserFilter;
     const matchesStatus = dataStatusFilter === 'ALL' || r.status === dataStatusFilter;
+    const matchesReason =
+      dataReasonFilter === 'ALL' ||
+      (r.reason && r.reason.trim().toLowerCase() === dataReasonFilter.toLowerCase());
+    const q = dataSearch.trim().toLowerCase();
     const matchesSearch =
-      !dataSearch ||
-      r.reqNumber.toLowerCase().includes(dataSearch.toLowerCase()) ||
-      r.requesterName.toLowerCase().includes(dataSearch.toLowerCase()) ||
-      r.department.toLowerCase().includes(dataSearch.toLowerCase());
+      !q ||
+      r.reqNumber?.toLowerCase().includes(q) ||
+      r.requesterName?.toLowerCase().includes(q) ||
+      r.department?.toLowerCase().includes(q) ||
+      r.shift?.toLowerCase().includes(q) ||
+      r.reason?.toLowerCase().includes(q);
 
-    return matchesDept && matchesUser && matchesStatus && matchesSearch;
+    return matchesDept && matchesUser && matchesStatus && matchesReason && matchesSearch;
   });
 
   // Unique departments for filter
@@ -1018,6 +1042,35 @@ export default function AdminView({ user, onUserUpdated }) {
                 <option value="APPROVED">Approved</option>
                 <option value="REJECTED">Rejected</option>
               </select>
+
+              {/* Reason / Justification Filter */}
+              <select
+                value={dataReasonFilter}
+                onChange={(e) => setDataReasonFilter(e.target.value)}
+                className="px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-hidden max-w-[200px] truncate cursor-pointer"
+                title="Filter by Reason / Justification"
+              >
+                <option value="ALL">All Reasons ({availableReasons.length})</option>
+                {availableReasons.map((resn) => (
+                  <option key={resn} value={resn}>
+                    {resn}
+                  </option>
+                ))}
+              </select>
+
+              {(dataDeptFilter !== 'ALL' || dataStatusFilter !== 'ALL' || dataReasonFilter !== 'ALL' || dataSearch) && (
+                <button
+                  onClick={() => {
+                    setDataDeptFilter('ALL');
+                    setDataStatusFilter('ALL');
+                    setDataReasonFilter('ALL');
+                    setDataSearch('');
+                  }}
+                  className="text-xs font-bold text-rose-600 dark:text-rose-400 hover:underline cursor-pointer"
+                >
+                  Reset
+                </button>
+              )}
             </div>
           </div>
 
@@ -1047,6 +1100,7 @@ export default function AdminView({ user, onUserUpdated }) {
                   <th className="py-3 px-4">Department</th>
                   <th className="py-3 px-4">Requester</th>
                   <th className="py-3 px-4">Headcount / EPFs</th>
+                  <th className="py-3 px-4">Reason</th>
                   <th className="py-3 px-4">Current Status</th>
                   <th className="py-3 px-4 text-right">Delete Action</th>
                 </tr>
@@ -1054,7 +1108,7 @@ export default function AdminView({ user, onUserUpdated }) {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
                 {filteredRequests.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="py-10 text-center text-slate-400">
+                    <td colSpan="8" className="py-10 text-center text-slate-400">
                       No Double OT records found matching criteria.
                     </td>
                   </tr>
@@ -1077,6 +1131,9 @@ export default function AdminView({ user, onUserUpdated }) {
                         <span className="font-bold text-blue-600 dark:text-blue-400">
                           {r.employeeCount || r.employees?.length} persons
                         </span>
+                      </td>
+                      <td className="py-3 px-4 text-slate-600 dark:text-slate-400 max-w-xs truncate" title={r.reason}>
+                        {r.reason || '-'}
                       </td>
                       <td className="py-3 px-4">
                         {r.status === 'APPROVED' && (

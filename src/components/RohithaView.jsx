@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { CheckCircle2, XCircle, Eye, RefreshCw, BarChart3, Users, Clock, Trash2, Calendar, FileSpreadsheet, Bell } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { CheckCircle2, XCircle, Eye, RefreshCw, BarChart3, Users, Clock, Trash2, Calendar, FileSpreadsheet, Bell, Search, Filter } from 'lucide-react';
 import RequestDetailModal from './RequestDetailModal';
 import AnalyticsCharts from './AnalyticsCharts';
 import AttendanceAuditView from './AttendanceAuditView';
@@ -18,6 +18,8 @@ export default function RohithaView({ user, isViewerOnly = false }) {
   const [actionInProgress, setActionInProgress] = useState(false);
   const [message, setMessage] = useState(null);
   const [historyDeptFilter, setHistoryDeptFilter] = useState('ALL');
+  const [selectedReasonFilter, setSelectedReasonFilter] = useState('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const prevActionableCountRef = useRef(null);
 
@@ -89,11 +91,43 @@ export default function RohithaView({ user, isViewerOnly = false }) {
     }
   };
 
+  // Unique list of reasons extracted dynamically from requests
+  const availableReasons = useMemo(() => {
+    const map = new Map();
+    [...allRequests, ...allPending, ...actionable].forEach((r) => {
+      const trimmed = r?.reason?.trim();
+      if (trimmed) {
+        const key = trimmed.toLowerCase();
+        if (!map.has(key)) {
+          map.set(key, trimmed);
+        }
+      }
+    });
+    return Array.from(map.values()).sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: 'base' })
+    );
+  }, [allRequests, allPending, actionable]);
+
+  const filterList = (list) => {
+    return list.filter((r) => {
+      const matchReason =
+        selectedReasonFilter === 'ALL' ||
+        (r.reason && r.reason.trim().toLowerCase() === selectedReasonFilter.toLowerCase());
+      const q = searchQuery.trim().toLowerCase();
+      const matchSearch =
+        !q ||
+        r.reqNumber?.toLowerCase().includes(q) ||
+        r.requesterName?.toLowerCase().includes(q) ||
+        r.department?.toLowerCase().includes(q) ||
+        r.shift?.toLowerCase().includes(q) ||
+        r.reason?.toLowerCase().includes(q);
+      return matchReason && matchSearch;
+    });
+  };
+
   const getFilteredMonitoringList = () => {
-    if (monitorDateMode === 'today') {
-      return allPending.filter((r) => r.date === todayStr);
-    }
-    return allPending;
+    const list = monitorDateMode === 'today' ? allPending.filter((r) => r.date === todayStr) : allPending;
+    return filterList(list);
   };
 
   return (
@@ -248,6 +282,55 @@ export default function RohithaView({ user, isViewerOnly = false }) {
         </button>
       </div>
 
+      {/* Filters Bar: Search & Reason / Justification */}
+      {activeTab !== 'charts' && activeTab !== 'attendance_audit' && activeTab !== 'epf_summary' && activeTab !== 'daily_headcount' && (
+        <div className="bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs flex flex-wrap items-center justify-between gap-3 text-xs transition-colors">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-bold text-slate-700 dark:text-slate-300">
+              Reason / Justification:
+            </span>
+            <select
+              value={selectedReasonFilter}
+              onChange={(e) => setSelectedReasonFilter(e.target.value)}
+              className="px-3 py-1.5 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-white bg-white dark:bg-slate-800 cursor-pointer max-w-[240px] truncate"
+            >
+              <option value="ALL">All Reasons ({availableReasons.length})</option>
+              {availableReasons.map((resn) => (
+                <option key={resn} value={resn}>
+                  {resn}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-7 pr-3 py-1.5 border border-slate-300 dark:border-slate-700 rounded-xl text-xs bg-white dark:bg-slate-800 text-slate-800 dark:text-white w-40 sm:w-56 focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+              />
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2 top-2.5" />
+            </div>
+
+            {(selectedReasonFilter !== 'ALL' || searchQuery || (activeTab === 'all_history' && historyDeptFilter !== 'ALL')) && (
+              <button
+                onClick={() => {
+                  setSelectedReasonFilter('ALL');
+                  setSearchQuery('');
+                  setHistoryDeptFilter('ALL');
+                }}
+                className="text-[11px] font-bold text-rose-600 dark:text-rose-400 hover:underline cursor-pointer"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* TAB 1: HR APPROVALS */}
       {activeTab === 'hr_approvals' && (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs overflow-hidden transition-colors">
@@ -264,7 +347,7 @@ export default function RohithaView({ user, isViewerOnly = false }) {
 
           {loading ? (
             <div className="p-8 text-center text-xs text-slate-500">Loading HR requests...</div>
-          ) : actionable.length === 0 ? (
+          ) : filterList(actionable).length === 0 ? (
             <div className="p-8 text-center text-xs text-slate-500">
               ✓ No pending HR requests at the moment.
             </div>
@@ -284,7 +367,7 @@ export default function RohithaView({ user, isViewerOnly = false }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
-                  {actionable.map((req) => (
+                  {filterList(actionable).map((req) => (
                     <tr key={req._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                       <td className="py-3 px-4 font-mono font-bold text-blue-700 dark:text-blue-400">{req.reqNumber}</td>
                       <td className="py-3 px-4 font-bold text-slate-800 dark:text-white">{req.requesterName} (HR)</td>
@@ -386,6 +469,7 @@ export default function RohithaView({ user, isViewerOnly = false }) {
                       <th className="py-3 px-4">Shift</th>
                       <th className="py-3 px-4">Hours</th>
                       <th className="py-3 px-4">Headcount</th>
+                      <th className="py-3 px-4">Reason</th>
                       <th className="py-3 px-4">Approval Stage</th>
                       <th className="py-3 px-4 text-right">View</th>
                     </tr>
@@ -410,6 +494,9 @@ export default function RohithaView({ user, isViewerOnly = false }) {
                           >
                             {req.employeeCount || req.employees?.length} Persons
                           </button>
+                        </td>
+                        <td className="py-3 px-4 text-slate-600 dark:text-slate-400 max-w-xs truncate" title={req.reason}>
+                          {req.reason || '-'}
                         </td>
                         <td className="py-3 px-4">
                           {req.status === 'PENDING_L1' ? (
@@ -463,7 +550,7 @@ export default function RohithaView({ user, isViewerOnly = false }) {
           </div>
 
           <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs overflow-hidden transition-colors">
-            {allRequests.filter(r => historyDeptFilter === 'ALL' || r.department === historyDeptFilter).length === 0 ? (
+            {filterList(allRequests.filter(r => historyDeptFilter === 'ALL' || r.department === historyDeptFilter)).length === 0 ? (
               <div className="p-8 text-center text-xs text-slate-500">No requests found matching filter.</div>
             ) : (
               <div className="overflow-x-auto">
@@ -477,13 +564,13 @@ export default function RohithaView({ user, isViewerOnly = false }) {
                       <th className="py-3 px-4">Shift</th>
                       <th className="py-3 px-4">Hours</th>
                       <th className="py-3 px-4">Headcount</th>
+                      <th className="py-3 px-4">Reason</th>
                       <th className="py-3 px-4">Status</th>
                       <th className="py-3 px-4 text-right">View</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
-                    {allRequests
-                      .filter(r => historyDeptFilter === 'ALL' || r.department === historyDeptFilter)
+                    {filterList(allRequests.filter(r => historyDeptFilter === 'ALL' || r.department === historyDeptFilter))
                       .map((req) => (
                         <tr key={req._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                           <td className="py-3 px-4 font-mono font-bold text-blue-700 dark:text-blue-400">{req.reqNumber}</td>
@@ -493,6 +580,9 @@ export default function RohithaView({ user, isViewerOnly = false }) {
                           <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{req.shift}</td>
                           <td className="py-3 px-4 font-bold text-slate-800 dark:text-slate-200">{req.hours}h</td>
                           <td className="py-3 px-4 font-semibold text-slate-800 dark:text-slate-200">{req.employeeCount || req.employees?.length} Persons</td>
+                          <td className="py-3 px-4 text-slate-600 dark:text-slate-400 max-w-xs truncate" title={req.reason}>
+                            {req.reason || '-'}
+                          </td>
                           <td className="py-3 px-4">
                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                               req.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
