@@ -417,7 +417,7 @@ export default function LoginModal({ onLogin, theme, onToggleTheme }) {
                   activeTab === 'approverFinal' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white font-bold shadow-xs' : 'hover:text-slate-900'
                 }`}
               >
-                4. Final (Vinod / Niranjan)
+                4. Final
               </button>
             </div>
 
