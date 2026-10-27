@@ -106,7 +106,7 @@ export default function App() {
       return <AdminView user={currentUser} onUserUpdated={setCurrentUser} />;
     }
 
-    if (currentUser.role === 'approver_final') {
+    if (currentUser.role === 'approver_final' || currentUser.username === 'Vinod' || currentUser.username === 'Niranjan') {
       return <VinodView user={currentUser} />;
     }
 

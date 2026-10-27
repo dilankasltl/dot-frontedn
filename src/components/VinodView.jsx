@@ -86,7 +86,7 @@ export default function VinodView({ user }) {
     setActionInProgress(true);
     setMessage(null);
     try {
-      await api.finalAction(id, action, user.username, 'Final Authorization granted by Mr. Vinod');
+      await api.finalAction(id, action, user.username, `Final Authorization granted by ${user.name}`);
       setMessage({
         type: 'success',
         text: `Double OT Request successfully ${action === 'APPROVE' ? 'Authorized and Approved' : 'Rejected'}.`
@@ -147,14 +147,14 @@ export default function VinodView({ user }) {
     if (req.status === 'APPROVED') {
       return (
         <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
-          ✓ Approved
+          ✓ Approved {req.finalApprover?.name ? `(${req.finalApprover.name})` : ''}
         </span>
       );
     }
     if (req.status === 'REJECTED') {
       return (
         <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-800">
-          ✕ Rejected
+          ✕ Rejected {req.finalApprover?.name ? `(${req.finalApprover.name})` : ''}
         </span>
       );
     }
@@ -233,7 +233,7 @@ export default function VinodView({ user }) {
               <ShieldCheck className="w-5 h-5 text-purple-700 dark:text-purple-400" />
             </span>
             <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-              Executive Final Approval Portal — Mr. Vinod
+              Executive Final Approval Portal — {user.name}
             </h2>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">

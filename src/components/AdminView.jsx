@@ -1038,7 +1038,7 @@ export default function AdminView({ user, onUserUpdated }) {
               >
                 <option value="ALL">All Statuses</option>
                 <option value="PENDING_L1">Pending HOD</option>
-                <option value="PENDING_FINAL">Pending Final (Vinod)</option>
+                <option value="PENDING_FINAL">Pending Final (Vinod / Niranjan)</option>
                 <option value="APPROVED">Approved</option>
                 <option value="REJECTED">Rejected</option>
               </select>
@@ -1148,7 +1148,7 @@ export default function AdminView({ user, onUserUpdated }) {
                         )}
                         {r.status === 'PENDING_FINAL' && (
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300">
-                            Pending Final (Mr. Vinod)
+                            Pending Final (Mr. Vinod / Mr. Niranjan)
                           </span>
                         )}
                         {r.status === 'REJECTED' && (
@@ -1426,7 +1426,7 @@ export default function AdminView({ user, onUserUpdated }) {
                         : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400'
                     }`}
                   >
-                    Final Authority (Vinod)
+                    Final Authority (Vinod / Niranjan)
                   </button>
                   <button
                     type="button"
@@ -1775,7 +1775,7 @@ export default function AdminView({ user, onUserUpdated }) {
                   <option value="requester">Department Requester</option>
                   <option value="approver_l1">Level 1 Approver (HOD)</option>
                   <option value="viewer">Plant Monitor & Auditor (Viewer)</option>
-                  <option value="approver_final">Final Approver (Vinod)</option>
+                  <option value="approver_final">Final Approver (Vinod / Niranjan)</option>
                   <option value="admin">System Administrator</option>
                 </select>
               </div>

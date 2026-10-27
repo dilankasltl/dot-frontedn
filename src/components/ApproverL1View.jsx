@@ -80,7 +80,7 @@ export default function ApproverL1View({ user }) {
       await api.l1Action(id, action, user.username, `Recommended by ${user.name}`);
       setMessage({
         type: 'success',
-        text: `Request successfully ${action === 'APPROVE' ? 'recommended and routed to Mr. Vinod for Final Approval' : 'rejected'}.`
+        text: `Request successfully ${action === 'APPROVE' ? 'recommended and routed for Final Approval (Mr. Vinod / Mr. Niranjan)' : 'rejected'}.`
       });
       fetchData();
     } catch (err) {
@@ -98,7 +98,7 @@ export default function ApproverL1View({ user }) {
       const res = await api.batchAction(selectedIds, action, user.username, 'l1');
       setMessage({
         type: 'success',
-        text: `Successfully ${action === 'APPROVE' ? 'recommended' : 'rejected'} ${res.updatedCount} request(s). Routed to Mr. Vinod!`
+        text: `Successfully ${action === 'APPROVE' ? 'recommended' : 'rejected'} ${res.updatedCount} request(s). Routed to Final Approvers (Mr. Vinod / Mr. Niranjan)!`
       });
       fetchData();
     } catch (err) {
@@ -408,7 +408,7 @@ export default function ApproverL1View({ user }) {
                   onClick={() => handleBatchAction('APPROVE')}
                   className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer"
                 >
-                  <CheckCheck className="w-3.5 h-3.5" /> Recommend to Mr. Vinod
+                  <CheckCheck className="w-3.5 h-3.5" /> Recommend to Final Approvers
                 </button>
                 <button
                   type="button"
@@ -498,7 +498,7 @@ export default function ApproverL1View({ user }) {
                             onClick={() => handleSingleAction(req._id, 'APPROVE')}
                             className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs cursor-pointer"
                           >
-                            <CheckCircle2 className="w-3.5 h-3.5" /> Recommend (To Vinod)
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Recommend (To Final)
                           </button>
                           <button
                             disabled={actionInProgress}
@@ -509,7 +509,7 @@ export default function ApproverL1View({ user }) {
                           </button>
                           <button
                             onClick={() => {
-                              if (confirm('Delete this request? Neither HOD nor Mr. Vinod will see it.')) {
+                              if (confirm('Delete this request? Neither HOD nor Final Approvers will see it.')) {
                                 handleDelete(req._id);
                               }
                             }}
@@ -606,7 +606,7 @@ export default function ApproverL1View({ user }) {
                           req.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
                           req.status === 'PENDING_FINAL' ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300' : 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
                         }`}>
-                          {req.status === 'PENDING_FINAL' ? 'With Mr. Vinod (Final Approval)' : req.status}
+                          {req.status === 'PENDING_FINAL' ? 'With Final Approver (Mr. Vinod / Mr. Niranjan)' : req.status}
                         </span>
                       </td>
                       <td className="py-3 px-4 text-right">
@@ -710,7 +710,7 @@ export default function ApproverL1View({ user }) {
                             </span>
                           ) : (
                             <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-                              Pending (Mr. Vinod)
+                              Pending (Final Approver)
                             </span>
                           )}
                         </td>

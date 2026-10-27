@@ -71,7 +71,7 @@ export default function RohithaView({ user, isViewerOnly = false }) {
       await api.l1Action(id, action, user.username, 'Approved by Mr. Rohitha (HR Approver)');
       setMessage({
         type: 'success',
-        text: `HR Double OT Request ${action === 'APPROVE' ? 'recommended and forwarded to Mr. Vinod for Final Approval' : 'rejected'}.`
+        text: `HR Double OT Request ${action === 'APPROVE' ? 'recommended and forwarded for Final Approval (Mr. Vinod / Mr. Niranjan)' : 'rejected'}.`
       });
       fetchData();
     } catch (err) {
@@ -399,7 +399,7 @@ export default function RohithaView({ user, isViewerOnly = false }) {
                             onClick={() => handleHrAction(req._id, 'APPROVE')}
                             className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs cursor-pointer"
                           >
-                            <CheckCircle2 className="w-3.5 h-3.5" /> Approve (To Vinod)
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Approve (To Final)
                           </button>
                           <button
                             disabled={actionInProgress}
@@ -505,7 +505,7 @@ export default function RohithaView({ user, isViewerOnly = false }) {
                             </span>
                           ) : (
                             <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-                              Pending (Mr. Vinod)
+                              Pending (Final Approver)
                             </span>
                           )}
                         </td>
@@ -590,8 +590,8 @@ export default function RohithaView({ user, isViewerOnly = false }) {
                               req.status === 'REJECTED' ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300' :
                               'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
                             }`}>
-                              {req.status === 'APPROVED' ? 'Authorized (Vinod sir)' :
-                               req.status === 'PENDING_FINAL' ? 'Pending Final (Mr. Vinod)' :
+                              {req.status === 'APPROVED' ? `Authorized (${req.finalApprover?.name || 'Final Approver'})` :
+                               req.status === 'PENDING_FINAL' ? 'Pending Final (Mr. Vinod / Mr. Niranjan)' :
                                req.status === 'PENDING_L1' ? `Pending (${req.l1Approver?.name || 'HOD'})` : req.status}
                             </span>
                           </td>

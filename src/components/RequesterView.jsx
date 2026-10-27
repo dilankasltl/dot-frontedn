@@ -137,24 +137,24 @@ export default function RequesterView({ user }) {
     }
   };
 
-  const getStatusBadge = (status, l1Name) => {
+  const getStatusBadge = (status, l1Name, finalApproverName) => {
     switch (status) {
       case 'APPROVED':
         return (
           <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
-            ✓ Final Authorized (Mr. Vinod)
+            ✓ Final Authorized ({finalApproverName || 'Mr. Vinod / Mr. Niranjan'})
           </span>
         );
       case 'REJECTED':
         return (
           <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-800">
-            ✕ Rejected
+            ✕ Rejected {finalApproverName ? `(${finalApproverName})` : ''}
           </span>
         );
       case 'PENDING_FINAL':
         return (
           <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 border border-purple-300 dark:border-purple-800">
-            ⏳ Pending Final (Mr. Vinod)
+            ⏳ Pending Final ({finalApproverName || 'Mr. Vinod / Mr. Niranjan'})
           </span>
         );
       default:
@@ -285,7 +285,7 @@ export default function RequesterView({ user }) {
             </div>
             <div className="flex items-center gap-2">
               <div className="px-3 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-xs text-blue-800 dark:text-blue-300 font-medium">
-                Route: <strong className="text-blue-900 dark:text-blue-200">{user.assignedL1Approver}</strong> ➔ <strong className="text-purple-900 dark:text-purple-300">Mr. Vinod</strong>
+                Route: <strong className="text-blue-900 dark:text-blue-200">{user.assignedL1Approver}</strong> ➔ <strong className="text-purple-900 dark:text-purple-300">Mr. Vinod / Mr. Niranjan</strong>
               </div>
               {editingRequestId && (
                 <button
@@ -521,7 +521,7 @@ export default function RequesterView({ user }) {
                           {req.reason}
                         </td>
                         <td className="py-3 px-4">
-                          {getStatusBadge(req.status, req.l1Approver?.name)}
+                          {getStatusBadge(req.status, req.l1Approver?.name, req.finalApprover?.name)}
                         </td>
                         <td className="py-3 px-4 text-right">
                           <div className="inline-flex items-center gap-1.5">
@@ -544,7 +544,7 @@ export default function RequesterView({ user }) {
                             {req.status !== 'APPROVED' && (
                               <button
                                 onClick={() => {
-                                  if (confirm('Delete this request? Neither HOD nor Mr. Vinod will see it.')) {
+                                  if (confirm('Delete this request? Neither HOD nor Final Approvers will see it.')) {
                                     handleDelete(req._id);
                                   }
                                 }}

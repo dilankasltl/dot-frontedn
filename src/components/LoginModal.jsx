@@ -26,11 +26,11 @@ const PRESET_USERS = {
     { username: 'Shemba', label: 'Mr. Shemba', scope: 'ENGINEERING' },
   ],
   approverFinal: [
-    { username: 'Vinod', label: 'Mr. Vinod', scope: 'Final Approval (All Departments) + Executive Analytics' }
+    { username: 'Vinod', label: 'Mr. Vinod', scope: 'Final Approval (All Departments) + Executive Analytics' },
+    { username: 'Niranjan', label: 'Mr. Niranjan', scope: 'Final Approval (All Departments) + Executive Analytics' }
   ],
   viewers: [
-    { username: 'Nimesh', label: 'Mr. Nimesh', scope: 'Plant Monitor & Double OT Attendance Auditor' },
-    { username: 'Niranjan', label: 'Mr. Niranjan', scope: 'Plant-wide Executive Monitor & Auditor' }
+    { username: 'Nimesh', label: 'Mr. Nimesh', scope: 'Plant Monitor & Double OT Attendance Auditor' }
   ]
 };
 
@@ -417,7 +417,7 @@ export default function LoginModal({ onLogin, theme, onToggleTheme }) {
                   activeTab === 'approverFinal' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white font-bold shadow-xs' : 'hover:text-slate-900'
                 }`}
               >
-                4. Final (Vinod)
+                4. Final (Vinod / Niranjan)
               </button>
             </div>
 
